@@ -2,7 +2,7 @@
 
 一个基于大语言模型的个人 AI 聊天助手项目。
 
-> Current version: v1.1.3
+> Current version: v1.1.4
 
 ## Features
 
@@ -12,12 +12,17 @@
 - 长期记忆系统
 - 情绪状态系统
 - 关系状态系统
+- 多会话、自动标题、重命名与删除
+- 小悠静态头像
 - 本地 SQLite 数据持久化
 
 ## Project Structure
 
 ```text
 MyAI/
+├── assets/
+│   └── character/
+│       └── xiaoyou_avatar.png
 ├── ai.py
 ├── character.py
 ├── emotion.py
@@ -32,8 +37,11 @@ MyAI/
 ## Installation
 
 ```bash
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
+python gui.py
 ```
+
+头像路径通过 `Path(__file__)` 相对于项目目录解析，方便从不同工作目录启动及后续打包。
 
 ## API Configuration
 
