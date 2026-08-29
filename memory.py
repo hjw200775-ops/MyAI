@@ -1,3 +1,4 @@
+import os
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime
@@ -5,7 +6,7 @@ from pathlib import Path
 from threading import RLock
 
 
-DB_PATH = Path(__file__).resolve().with_name("memory.db")
+DB_PATH = Path(os.getenv("MYAI_DB_PATH", str(Path(__file__).resolve().with_name("memory.db"))))
 VALID_CATEGORIES = {
     "identity", "interest", "study", "work", "goal", "preference",
     "relationship", "other",
@@ -153,10 +154,17 @@ def init_database():
                 conversation_id INTEGER NOT NULL,
                 role TEXT NOT NULL CHECK (role IN ('user','assistant')),
                 content TEXT NOT NULL,
+                image_path TEXT,
+                message_type TEXT NOT NULL DEFAULT 'text',
                 created_at TEXT NOT NULL,
                 FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
             )
         """)
+        message_columns = {row["name"] for row in conn.execute("PRAGMA table_info(messages)")}
+        if "image_path" not in message_columns:
+            conn.execute("ALTER TABLE messages ADD COLUMN image_path TEXT")
+        if "message_type" not in message_columns:
+            conn.execute("ALTER TABLE messages ADD COLUMN message_type TEXT NOT NULL DEFAULT 'text'")
         conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_messages_conversation_id_id
             ON messages(conversation_id, id)
@@ -269,22 +277,55 @@ def load_messages(conversation_id, limit=None):
     return [tuple(row) for row in rows]
 
 
-def save_message(conversation_id, role, content):
+def load_message_records(conversation_id, limit=None):
+    """加载含图片元数据的消息；旧版 load_messages 的五元组保持兼容。"""
+    try:
+        conversation_id = int(conversation_id)
+    except (TypeError, ValueError):
+        return []
+    params = (conversation_id,)
+    query = """
+        SELECT id,conversation_id,role,content,image_path,message_type,created_at
+        FROM messages WHERE conversation_id=? ORDER BY id
+    """
+    if limit is not None:
+        try:
+            limit = max(0, int(limit))
+        except (TypeError, ValueError):
+            return []
+        if limit == 0:
+            return []
+        query = """
+            SELECT id,conversation_id,role,content,image_path,message_type,created_at FROM (
+                SELECT id,conversation_id,role,content,image_path,message_type,created_at
+                FROM messages WHERE conversation_id=? ORDER BY id DESC LIMIT ?
+            ) ORDER BY id
+        """
+        params = (conversation_id, limit)
+    with _conversation_lock, database_connection() as conn:
+        rows = conn.execute(query, params).fetchall()
+    return [dict(row) for row in rows]
+
+
+def save_message(conversation_id, role, content, image_path=None):
     try:
         conversation_id = int(conversation_id)
     except (TypeError, ValueError):
         return None
     role = str(role or "").strip().lower()
     content = str(content or "").strip()
-    if role not in VALID_ROLES or not content:
+    image_path = Path(str(image_path)).name if image_path else None
+    if role not in VALID_ROLES or (not content and not image_path):
         return None
+    message_type = "text_image" if content and image_path else ("image" if image_path else "text")
     now = _now()
     with _conversation_lock, database_connection() as conn:
         if conn.execute("SELECT 1 FROM conversations WHERE id=?", (conversation_id,)).fetchone() is None:
             return None
         cursor = conn.execute("""
-            INSERT INTO messages(conversation_id,role,content,created_at) VALUES(?,?,?,?)
-        """, (conversation_id, role, content, now))
+            INSERT INTO messages(conversation_id,role,content,image_path,message_type,created_at)
+            VALUES(?,?,?,?,?,?)
+        """, (conversation_id, role, content, image_path, message_type, now))
         conn.execute("UPDATE conversations SET updated_at=? WHERE id=?", (now, conversation_id))
         return cursor.lastrowid
 
@@ -354,3 +395,4 @@ def delete_memory(memory_id):
 
 
 init_database()
+

@@ -1,16 +1,18 @@
 import queue
 import threading
 from pathlib import Path
-from tkinter import messagebox
+from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
 from PIL import Image
 
 from ai import chat, generate_conversation_title, refresh_system_prompt
 from emotion import get_emotion
+from media import SUPPORTED_IMAGE_EXTENSIONS, validate_image
 from memory import (create_conversation, delete_conversation, delete_memory,
                     get_or_create_current_conversation, list_conversations,
-                    load_memories, load_messages, rename_conversation, save_memory)
+                    load_memories, load_message_records, load_messages,
+                    rename_conversation, save_memory)
 from relationship import get_relationship
 
 ctk.set_appearance_mode("dark")
@@ -23,13 +25,15 @@ if not AVATAR_PATH.is_file():
     raise FileNotFoundError(f"找不到小悠头像资源：{AVATAR_PATH}")
 
 app = ctk.CTk()
-app.title("MyAI v1.1.4")
+app.title("MyAI v1.3")
 app.geometry("940x700")
 app.minsize(780, 580)
 
 current_conversation_id = get_or_create_current_conversation()
 result_queue = queue.Queue()
 request_in_progress = False
+selected_image_path = None
+preview_ctk_image = None
 
 
 def show_memories():
@@ -147,19 +151,64 @@ ctk.CTkButton(button_frame, text="情绪状态", width=105, command=show_emotion
 ctk.CTkButton(button_frame, text="关系状态", width=105, command=show_relationship).pack(side="left", padx=5)
 chat_box = ctk.CTkTextbox(main_frame, font=("Microsoft YaHei", 16))
 chat_box.pack(fill="both", expand=True, padx=16, pady=(2, 10))
+preview_frame = ctk.CTkFrame(main_frame)
+preview_image_label = ctk.CTkLabel(preview_frame, text="")
+preview_image_label.pack(side="left", padx=10, pady=8)
+preview_name_label = ctk.CTkLabel(preview_frame, text="", anchor="w")
+preview_name_label.pack(side="left", fill="x", expand=True, padx=(0, 8))
 input_frame = ctk.CTkFrame(main_frame)
 input_frame.pack(fill="x", padx=16, pady=(0, 14))
+attachment_button = ctk.CTkButton(input_frame, text="📎", width=44)
+attachment_button.pack(side="left", padx=(10, 0), pady=10)
 input_box = ctk.CTkEntry(input_frame, placeholder_text="输入消息...", font=("Microsoft YaHei", 16))
 input_box.pack(side="left", fill="x", expand=True, padx=10, pady=10)
+
+
+def clear_selected_image():
+    global selected_image_path, preview_ctk_image
+    selected_image_path = None
+    # 先让 Tk 标签解除对图片的引用，再释放 Python 侧 CTkImage。
+    # 反过来会使底层 pyimage 提前销毁并触发 TclError。
+    preview_image_label.configure(image=None, text="")
+    preview_ctk_image = None
+    preview_name_label.configure(text="")
+    preview_frame.pack_forget()
+
+
+def select_image():
+    global selected_image_path, preview_ctk_image
+    patterns = " ".join(f"*{ext}" for ext in sorted(SUPPORTED_IMAGE_EXTENSIONS))
+    value = filedialog.askopenfilename(
+        title="选择图片",
+        filetypes=[("图片文件", patterns), ("所有文件", "*.*")],
+        parent=app,
+    )
+    if not value:
+        return
+    try:
+        path = validate_image(value)
+        with Image.open(path) as source:
+            image = source.copy()
+        image.thumbnail((180, 120), Image.Resampling.LANCZOS)
+        preview_ctk_image = ctk.CTkImage(light_image=image, dark_image=image, size=image.size)
+    except (OSError, ValueError) as exc:
+        messagebox.showerror("无法选择图片", str(exc), parent=app)
+        return
+    selected_image_path = str(path)
+    preview_image_label.configure(image=preview_ctk_image, text="")
+    preview_name_label.configure(text=f"已选择：{path.name}")
+    preview_frame.pack(fill="x", padx=16, pady=(0, 8), before=input_frame)
 
 
 def render_current_conversation():
     chat_box.configure(state="normal")
     chat_box.delete("1.0", "end")
-    history = load_messages(current_conversation_id)
+    history = load_message_records(current_conversation_id)
     if history:
-        for _, _, role, content, _ in history:
-            chat_box.insert("end", f"{'你' if role == 'user' else '小悠'}：{content}\n\n")
+        for row in history:
+            prefix = "你" if row["role"] == "user" else "小悠"
+            image_line = f"[图片：{row['image_path']}]\n" if row["image_path"] else ""
+            chat_box.insert("end", f"{prefix}：{image_line}{row['content']}\n\n")
     else:
         chat_box.insert("end", "小悠：你好呀。\n\n")
     chat_box.configure(state="disabled")
@@ -169,6 +218,7 @@ def render_current_conversation():
 def switch_conversation(conversation_id):
     global current_conversation_id
     current_conversation_id = int(conversation_id)
+    clear_selected_image()
     render_current_conversation()
     refresh_conversation_list()
 
@@ -219,14 +269,15 @@ def new_conversation():
 def set_input_enabled(enabled):
     state = "normal" if enabled else "disabled"
     send_button.configure(state=state)
+    attachment_button.configure(state=state)
     input_box.configure(state=state)
     if enabled:
         input_box.focus()
 
 
-def ask_ai(user_text, conversation_id):
+def ask_ai(user_text, image_path, conversation_id):
     try:
-        ai_reply, saved_memory = chat(user_text, conversation_id)
+        ai_reply, saved_memory = chat(user_text, conversation_id, image_path=image_path)
         title = generate_conversation_title(conversation_id)
         result_queue.put((conversation_id, ai_reply, saved_memory, title))
     except Exception:
@@ -264,20 +315,27 @@ def process_results():
 def send_message():
     global request_in_progress
     user_text = input_box.get().strip()
-    if not user_text or request_in_progress:
+    image_path = selected_image_path
+    if (not user_text and not image_path) or request_in_progress:
         return
     conversation_id = current_conversation_id
     request_in_progress = True
     chat_box.configure(state="normal")
-    chat_box.insert("end", f"你：{user_text}\n\n小悠正在思考...\n\n")
+    pending_image = f"[图片：{Path(image_path).name}]\n" if image_path else ""
+    chat_box.insert("end", f"你：{pending_image}{user_text}\n\n小悠正在思考...\n\n")
     chat_box.configure(state="disabled")
     chat_box.see("end")
     input_box.delete(0, "end")
+    clear_selected_image()
     set_input_enabled(False)
-    threading.Thread(target=ask_ai, args=(user_text, conversation_id), daemon=True).start()
+    threading.Thread(target=ask_ai, args=(user_text, image_path, conversation_id), daemon=True).start()
 
 
 new_button.configure(command=new_conversation)
+attachment_button.configure(command=select_image)
+cancel_image_button = ctk.CTkButton(preview_frame, text="取消", width=62,
+                                    fg_color="#8b3030", command=clear_selected_image)
+cancel_image_button.pack(side="right", padx=10, pady=8)
 send_button = ctk.CTkButton(input_frame, text="发送", width=80, command=send_message)
 send_button.pack(side="right", padx=(0, 10), pady=10)
 input_box.bind("<Return>", lambda _event: send_message())
@@ -286,3 +344,4 @@ render_current_conversation()
 input_box.focus()
 app.after(50, process_results)
 app.mainloop()
+

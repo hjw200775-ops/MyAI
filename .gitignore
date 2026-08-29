@@ -1,29 +1,35 @@
-# Secrets
+# Secrets and local configuration
 .env
 .env.*
 !.env.example
 
-# Local data / private conversations
-*.db
-*.sqlite
-*.sqlite3
-
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
+# Python environments and generated files
 .venv/
 venv/
 env/
-.venv-*/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
-# IDE / OS
-.vscode/
+# Private runtime data
+memory.db
+*.db
+*.sqlite
+*.sqlite3
+images/
+user_images/
+uploads/
+cache/
+logs/
+*.log
+*.cache
+
+# Editor and operating-system files
 .idea/
+.vscode/
 .DS_Store
 Thumbs.db
 
-# Logs and local backups
-*.log
-*.bak
-*.tmp

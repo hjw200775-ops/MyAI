@@ -34,3 +34,4 @@ def change_emotion(happiness=0, sadness=0, anger=0):
                 ON CONFLICT(name) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at
             """, (name, value, now))
     return get_emotion()
+

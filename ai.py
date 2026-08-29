@@ -1,11 +1,8 @@
 import json
-import os
-
-from dotenv import load_dotenv
-from openai import OpenAI
-
-from character import build_character_prompt
-from emotion import change_emotion, get_emotion
+from context import CONTEXT_MESSAGE_LIMIT, default_context_builder
+from emotion import change_emotion
+from llm import VisionNotSupportedError, get_default_provider, get_vision_provider
+from media import persist_image
 from memory import (
     VALID_CATEGORIES,
     get_or_create_current_conversation,
@@ -17,12 +14,20 @@ from memory import (
     save_message,
     update_memory,
 )
-from relationship import build_relationship_prompt, change_relationship
+from relationship import change_relationship
 
 
-load_dotenv()
-client = OpenAI(api_key=os.getenv("DEEPSEEK_API_KEY"), base_url="https://api.deepseek.com")
-CONTEXT_MESSAGE_LIMIT = 30
+def _llm_chat(messages, *, response_format=None, timeout=None):
+    return get_default_provider().chat(
+        messages, response_format=response_format, timeout=timeout
+    )
+
+
+def _vision_chat(messages, *, timeout=None):
+    provider = get_vision_provider()
+    if not provider.supports_vision:
+        raise VisionNotSupportedError("当前 Vision Provider 不支持图片输入。")
+    return provider.chat(messages, timeout=timeout)
 
 
 def _clean_title(raw):
@@ -55,12 +60,9 @@ def generate_conversation_title(conversation_id):
 {transcript}
 </conversation>"""
     try:
-        response = client.chat.completions.create(
-            model="deepseek-chat",
-            messages=[{"role": "user", "content": prompt}],
-            timeout=20,
-        )
-        title = _clean_title(response.choices[0].message.content)
+        title = _clean_title(_llm_chat(
+            [{"role": "user", "content": prompt}], timeout=20
+        ))
     except Exception:
         return None
     if not title or title in {"新对话", "默认会话"}:
@@ -69,24 +71,7 @@ def generate_conversation_title(conversation_id):
 
 
 def build_system_prompt():
-    memories = load_memories()
-    memory_text = "\n".join(
-        f"- [{category}] {content}" for _, content, category, _, _ in memories
-    ) or "目前没有长期记忆。"
-    emotion = get_emotion()
-    return f"""{build_character_prompt()}
-
-【当前情绪】
-开心：{emotion['happiness']:.1f}；难过：{emotion['sadness']:.1f}；生气：{emotion['anger']:.1f}
-让情绪克制地影响措辞，不要直接报告数值或过度表演。
-
-【与用户的关系】
-{build_relationship_prompt()}
-
-【关于用户的长期记忆】
-{memory_text}
-只在当前话题确实相关时自然使用记忆，不要为了证明有记忆而复述或罗列资料。
-"""
+    return default_context_builder.build_system_prompt()
 
 
 def refresh_system_prompt():
@@ -136,13 +121,12 @@ closeness 根据真诚分享、理解与自然的情感联结变化，不等于�
 <user_message>{user_input}</user_message>
 """
     try:
-        response = client.chat.completions.create(
-            model="deepseek-chat",
-            messages=[{"role": "user", "content": prompt}],
+        raw = _llm_chat(
+            [{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
             timeout=30,
         )
-        result = _safe_json_object(response.choices[0].message.content)
+        result = _safe_json_object(raw)
     except Exception:
         return None
     required = {"happiness", "sadness", "anger", "trust", "familiarity", "closeness"}
@@ -189,11 +173,11 @@ content 必须是简洁、独立、客观的中文记忆，none 时必须为空�
 """
     fallback = {"action": "none", "memory_id": None, "content": "", "category": "other"}
     try:
-        response = client.chat.completions.create(
-            model="deepseek-chat", messages=[{"role": "user", "content": prompt}],
-            response_format={"type": "json_object"}, timeout=30,
+        raw = _llm_chat(
+            [{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"}, timeout=30
         )
-        result = _safe_json_object(response.choices[0].message.content)
+        result = _safe_json_object(raw)
     except Exception:
         return fallback
     required = {"action", "memory_id", "content", "category"}
@@ -234,42 +218,51 @@ def auto_save_memory(user_input):
 
 
 def _conversation_context(conversation_id):
-    history = load_messages(conversation_id, limit=CONTEXT_MESSAGE_LIMIT)
-    return [
-        {"role": role, "content": content}
-        for _message_id, _conversation_id, role, content, _created_at in history
-    ]
+    """兼容旧扩展代码；实际构建职责已迁至 context.py。"""
+    return default_context_builder.build_recent_messages(
+        conversation_id, limit=CONTEXT_MESSAGE_LIMIT
+    )
 
 
-def chat(user_input, conversation_id=None):
+def chat(user_input="", conversation_id=None, image_path=None):
     user_input = str(user_input or "").strip()
-    if not user_input:
+    if not user_input and not image_path:
         return "请输入一些内容。", None
     conversation_id = conversation_id or get_or_create_current_conversation()
-    try:
-        update_interaction_state(user_input)
-    except Exception:
-        pass
+    if user_input:
+        try:
+            update_interaction_state(user_input)
+        except Exception:
+            pass
+    stored_image = None
+    if image_path:
+        try:
+            stored_image = persist_image(image_path)
+        except (OSError, ValueError) as exc:
+            return f"图片无法使用：{exc}", None
     # user 消息是真实发生的输入，即使 API 失败也保留；失败提示不伪装成 assistant 消息。
-    if save_message(conversation_id, "user", user_input) is None:
+    if save_message(conversation_id, "user", user_input, stored_image) is None:
         return "保存消息时发生错误，请稍后再试。", None
-    request_messages = [
-        {"role": "system", "content": build_system_prompt()},
-        *_conversation_context(conversation_id),
-    ]
+    request_messages = default_context_builder.build_messages(conversation_id)
+    uses_vision = any(isinstance(message.get("content"), list) for message in request_messages)
     try:
-        response = client.chat.completions.create(
-            model="deepseek-chat", messages=request_messages, timeout=30,
-        )
-        ai_reply = str(response.choices[0].message.content or "").strip()
+        ai_reply = (_vision_chat(request_messages, timeout=45) if uses_vision
+                    else _llm_chat(request_messages, timeout=30))
         if not ai_reply:
             raise ValueError("empty response")
         if save_message(conversation_id, "assistant", ai_reply) is None:
             return "回复已收到，但保存聊天记录失败。", None
+    except VisionNotSupportedError as exc:
+        return f"无法识图：{exc}", None
+    except RuntimeError as exc:
+        # Provider 的本地配置错误可以安全展示；不回显远端请求或密钥。
+        return f"视觉服务未就绪：{exc}" if uses_vision else "连接服务时发生错误，请稍后再试。", None
     except Exception:
-        return "连接服务时发生错误，请稍后再试。", None
+        return ("图片理解服务调用失败。请检查 Vision Provider、模型权限和网络连接。"
+                if uses_vision else "连接服务时发生错误，请稍后再试。"), None
     try:
-        saved_memory = auto_save_memory(user_input)
+        saved_memory = auto_save_memory(user_input) if user_input else None
     except Exception:
         saved_memory = None
     return ai_reply, saved_memory
+
