@@ -1,6 +1,7 @@
 from .base import LLMProvider, Message, VisionNotSupportedError
 from .config import LLMConfig, VisionConfig
 from .deepseek import DeepSeekProvider
+from .deepseek_vision import DeepSeekVisionProvider
 from .openai_vision import OpenAIVisionProvider
 
 _default_provider: LLMProvider | None = None
@@ -23,11 +24,13 @@ def get_default_provider() -> LLMProvider:
 
 def create_vision_provider(config: VisionConfig | None = None) -> LLMProvider:
     config = config or VisionConfig.from_env()
+    if config.provider == "deepseek":
+        return DeepSeekVisionProvider(config)
     if config.provider == "openai":
         return OpenAIVisionProvider(config)
     if config.provider in {"", "none", "disabled"}:
         raise VisionNotSupportedError(
-            "尚未配置图片理解服务。请在 .env 设置 MYAI_VISION_PROVIDER=openai 和 OPENAI_API_KEY。"
+            "图片理解服务已禁用。请设置 MYAI_VISION_PROVIDER=deepseek 和 DEEPSEEK_API_KEY。"
         )
     raise ValueError(f"不支持的 Vision Provider：{config.provider}")
 
@@ -54,4 +57,3 @@ __all__ = ["LLMConfig", "VisionConfig", "LLMProvider", "Message",
            "VisionNotSupportedError", "create_provider", "create_vision_provider",
            "get_default_provider", "get_vision_provider", "set_default_provider",
            "set_vision_provider"]
-

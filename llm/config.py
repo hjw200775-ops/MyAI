@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from dataclasses import dataclass
 
 try:
@@ -6,8 +7,14 @@ try:
 except ImportError:  # 基础导入/离线测试不强制要求第三方依赖。
     load_dotenv = None
 
-if load_dotenv is not None:
-    load_dotenv()
+def _load_environment() -> None:
+    # Explicit project path avoids discovering unrelated parent .env files.
+    if load_dotenv is not None and os.getenv("MYAI_LOAD_DOTENV", "1") != "0":
+        load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+
+
+# Preserve startup configuration loading; tests explicitly disable it.
+_load_environment()
 
 
 def _positive_float(raw: str | None, default: float) -> float:
@@ -28,6 +35,7 @@ class LLMConfig:
 
     @classmethod
     def from_env(cls) -> "LLMConfig":
+        _load_environment()
         return cls(
             provider=os.getenv("MYAI_LLM_PROVIDER", "deepseek").strip().lower(),
             api_key=os.getenv("DEEPSEEK_API_KEY"),
@@ -39,19 +47,23 @@ class LLMConfig:
 
 @dataclass(frozen=True)
 class VisionConfig:
-    provider: str = "none"
+    provider: str = "deepseek"
     api_key: str | None = None
-    base_url: str = "https://api.openai.com/v1"
-    model: str = "gpt-5.4-mini"
+    base_url: str = "https://api.deepseek.com"
+    model: str = "deepseek-v4-flash-vision-exp"
     timeout: float = 45.0
 
     @classmethod
     def from_env(cls) -> "VisionConfig":
+        _load_environment()
+        provider = os.getenv("MYAI_VISION_PROVIDER", "deepseek").strip().lower()
+        is_openai = provider == "openai"
         return cls(
-            provider=os.getenv("MYAI_VISION_PROVIDER", "none").strip().lower(),
-            api_key=os.getenv("OPENAI_API_KEY"),
-            base_url=os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").strip(),
-            model=os.getenv("OPENAI_VISION_MODEL", "gpt-5.4-mini").strip(),
+            provider=provider,
+            api_key=os.getenv("OPENAI_API_KEY" if is_openai else "DEEPSEEK_API_KEY"),
+            base_url=os.getenv("OPENAI_BASE_URL" if is_openai else "DEEPSEEK_BASE_URL",
+                               "https://api.openai.com/v1" if is_openai else "https://api.deepseek.com").strip(),
+            model=os.getenv("OPENAI_VISION_MODEL" if is_openai else "DEEPSEEK_VISION_MODEL",
+                            "gpt-5.4-mini" if is_openai else "deepseek-v4-flash-vision-exp").strip(),
             timeout=_positive_float(os.getenv("MYAI_VISION_TIMEOUT"), 45.0),
         )
-

@@ -28,6 +28,8 @@ def _prepare_messages(messages: Sequence[Message]) -> list[dict[str, Any]]:
             continue
         parts: list[dict[str, Any]] = []
         for part in content:
+            if part.get("type") in {"image_path", "image_url"} and message["role"] != "user":
+                raise ValueError("图片内容块只能出现在 user 消息中。")
             if part.get("type") == "image_path":
                 parts.append({
                     "type": "image_url",
@@ -35,11 +37,16 @@ def _prepare_messages(messages: Sequence[Message]) -> list[dict[str, Any]]:
                 })
             elif part.get("type") == "text":
                 parts.append({"type": "text", "text": str(part.get("text", ""))})
+            elif part.get("type") == "image_url":
+                parts.append({"type": "image_url", "image_url": dict(part["image_url"])})
+            else:
+                raise ValueError("不支持的视觉消息内容块。")
         prepared.append({"role": message["role"], "content": parts})
     return prepared
 
 
 class OpenAIVisionProvider(LLMProvider):
+    api_key_variable = "OPENAI_API_KEY"
     def __init__(self, config: VisionConfig):
         self.config = config
         self._client: "OpenAI | None" = None
@@ -50,7 +57,7 @@ class OpenAIVisionProvider(LLMProvider):
 
     def _get_client(self) -> "OpenAI":
         if not self.config.api_key:
-            raise RuntimeError("已选择 OpenAI Vision Provider，但未设置 OPENAI_API_KEY。")
+            raise RuntimeError(f"未设置 {self.api_key_variable} 环境变量。")
         if self._client is None:
             try:
                 from openai import OpenAI
@@ -70,4 +77,3 @@ class OpenAIVisionProvider(LLMProvider):
             request["response_format"] = dict(response_format)
         response = self._get_client().chat.completions.create(**request)
         return str(response.choices[0].message.content or "").strip()
-

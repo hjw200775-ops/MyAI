@@ -3,6 +3,13 @@ import os
 import sys
 import tempfile
 from pathlib import Path
+from copy import deepcopy
+from contextlib import closing
+from types import SimpleNamespace
+from unittest.mock import patch
+
+# Must precede any llm/ai imports, even if python-dotenv is installed.
+os.environ["MYAI_LOAD_DOTENV"] = "0"
 
 from PIL import Image
 
@@ -11,13 +18,44 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from llm.base import LLMProvider, VisionNotSupportedError
 from llm.config import LLMConfig, VisionConfig
 from llm.deepseek import DeepSeekProvider
+from llm.deepseek_vision import DeepSeekVisionProvider
+from llm import create_vision_provider
 from llm.openai_vision import _prepare_messages
 from media import persist_image, resolve_image
 
 
 def main() -> None:
     assert LLMConfig().model == "deepseek-v4-flash"
-    assert VisionConfig().model == "gpt-5.4-mini"
+    assert VisionConfig().model == "deepseek-v4-flash-vision-exp"
+    with patch.dict(os.environ, {"MYAI_LOAD_DOTENV": "0", "DEEPSEEK_API_KEY": "offline-test"}, clear=True), \
+            patch("llm.config.load_dotenv", side_effect=AssertionError("dotenv must not load")):
+        config = VisionConfig.from_env()
+        assert config.provider == "deepseek"
+        assert config.api_key == LLMConfig.from_env().api_key == "offline-test"
+        assert config.base_url == LLMConfig.from_env().base_url == "https://api.deepseek.com"
+        assert isinstance(create_vision_provider(), DeepSeekVisionProvider)
+        with patch.dict(os.environ, {"DEEPSEEK_VISION_MODEL": "custom-vision",
+                                     "DEEPSEEK_BASE_URL": "https://example.invalid"}):
+            assert VisionConfig.from_env().model == "custom-vision"
+            assert VisionConfig.from_env().base_url == LLMConfig.from_env().base_url
+        with patch.dict(os.environ, {"MYAI_VISION_PROVIDER": "openai", "OPENAI_API_KEY": "offline-openai"}):
+            fallback = VisionConfig.from_env()
+            assert fallback.api_key == "offline-openai"
+            assert fallback.model == "gpt-5.4-mini"
+            assert fallback.base_url == "https://api.openai.com/v1"
+        for disabled in ("none", "disabled", ""):
+            try:
+                create_vision_provider(VisionConfig(provider=disabled))
+            except VisionNotSupportedError:
+                pass
+            else:
+                raise AssertionError("Disabled vision must not make requests")
+    try:
+        DeepSeekVisionProvider(VisionConfig(api_key=None)).chat([])
+    except RuntimeError as exc:
+        assert "DEEPSEEK_API_KEY" in str(exc)
+    else:
+        raise AssertionError("Missing key must fail locally")
     # 显式构造无密钥配置，避免 from_env 与 .env。
     text_provider = DeepSeekProvider(LLMConfig(api_key=None))
     try:
@@ -47,6 +85,35 @@ def main() -> None:
         }])
         url = messages[0]["content"][1]["image_url"]["url"]
         assert url.startswith("data:image/png;base64,")
+
+        # Exercise the actual Provider request boundary without any SDK/network.
+        captured = []
+        def complete(**request):
+            captured.append(request)
+            return SimpleNamespace(choices=[SimpleNamespace(
+                message=SimpleNamespace(content="  vision reply  "))])
+        vision = DeepSeekVisionProvider(VisionConfig(api_key="offline-test"))
+        vision._client = SimpleNamespace(chat=SimpleNamespace(
+            completions=SimpleNamespace(create=complete)))
+        original = [{"role": "user", "content": [
+            {"type": "text", "text": "Look"},
+            {"type": "image_path", "path": str(resolved)}]}]
+        snapshot = deepcopy(original)
+        assert vision.chat(original, timeout=12, response_format={"type": "json_object"}) == "vision reply"
+        assert original == snapshot
+        assert captured[-1]["model"] == "deepseek-v4-flash-vision-exp"
+        assert captured[-1]["timeout"] == 12
+        assert captured[-1]["response_format"] == {"type": "json_object"}
+        assert captured[-1]["messages"][0]["content"][1]["image_url"]["url"].startswith("data:image/png;base64,")
+        external = [{"role": "user", "content": [{"type": "image_url",
+                    "image_url": {"url": "https://example.invalid/photo.png"}}]}]
+        assert _prepare_messages(external) == external
+        try:
+            _prepare_messages([{**original[0], "role": "assistant"}])
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("Images must be restricted to user messages")
 
         # 用临时数据库和假 Provider 跑通三类消息，不发网络请求。
         os.environ["MYAI_DB_PATH"] = str(Path(folder) / "memory.db")
@@ -79,9 +146,31 @@ def main() -> None:
         assert [records[index]["message_type"] for index in (0, 2, 4)] == [
             "text", "image", "text_image"
         ]
+        source.unlink()
+        from context import default_context_builder
+        from memory import get_connection
+        for row in records:
+            assert "base64," not in str(dict(row))
+            if row["image_path"]:
+                assert Path(row["image_path"]).name == row["image_path"]
+                assert resolve_image(row["image_path"]) is not None
+        with closing(get_connection()) as connection:
+            assert connection.execute("SELECT count(*) FROM messages").fetchone()[0] == 6
+        restored = default_context_builder.build_messages(conversation_id)
+        assert sum(isinstance(m["content"], list) for m in restored) == 2
+        # A text follow-up with historical images must still use vision.
+        set_vision_provider(vision)
+        assert chat("再看看之前的图片", conversation_id)[0] == "vision reply"
+        assert sum(isinstance(m["content"], list) for m in captured[-1]["messages"]) == 2
+        for row in records:
+            if row["image_path"]:
+                resolve_image(row["image_path"]).unlink()
+        assert not any(isinstance(m["content"], list) for m in
+                       default_context_builder.build_messages(conversation_id))
+        set_default_provider(None)
+        set_vision_provider(None)
     print("MyAI V1.3 smoke test: PASS")
 
 
 if __name__ == "__main__":
     main()
-
