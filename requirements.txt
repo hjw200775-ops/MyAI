@@ -1,5 +1,4 @@
 customtkinter
-openai
+openai==3.6.0
 Pillow
 python-dotenv
-

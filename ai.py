@@ -1,4 +1,5 @@
 import json
+from llm.diagnostics import report_error
 from context import CONTEXT_MESSAGE_LIMIT, default_context_builder
 from emotion import change_emotion
 from llm import VisionNotSupportedError, get_default_provider, get_vision_provider
@@ -246,23 +247,20 @@ def chat(user_input="", conversation_id=None, image_path=None):
     request_messages = default_context_builder.build_messages(conversation_id)
     uses_vision = any(isinstance(message.get("content"), list) for message in request_messages)
     try:
-        ai_reply = (_vision_chat(request_messages, timeout=45) if uses_vision
-                    else _llm_chat(request_messages, timeout=30))
+        ai_reply = (_vision_chat(request_messages) if uses_vision
+                    else _llm_chat(request_messages))
         if not ai_reply:
             raise ValueError("empty response")
         if save_message(conversation_id, "assistant", ai_reply) is None:
             return "回复已收到，但保存聊天记录失败。", None
     except VisionNotSupportedError as exc:
         return f"无法识图：{exc}", None
-    except RuntimeError as exc:
-        # Provider 的本地配置错误可以安全展示；不回显远端请求或密钥。
-        return f"视觉服务未就绪：{exc}" if uses_vision else "连接服务时发生错误，请稍后再试。", None
-    except Exception:
-        return ("图片理解服务调用失败。请检查 Vision Provider、模型权限和网络连接。"
-                if uses_vision else "连接服务时发生错误，请稍后再试。"), None
+    except Exception as exc:
+        detail = report_error(exc)
+        return (f"图片理解服务调用失败：{detail}" if uses_vision
+                else f"连接服务时发生错误：{detail}"), None
     try:
         saved_memory = auto_save_memory(user_input) if user_input else None
     except Exception:
         saved_memory = None
     return ai_reply, saved_memory
-

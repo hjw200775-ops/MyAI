@@ -1,5 +1,13 @@
 # 更新日志
 
+## 2026-09-09 · DeepSeek Vision HTTP 400 修复
+
+- 修复 `DEEPSEEK_VISION_MODEL` 误填时导致的 HTTP 400，并固定使用 `deepseek-v4-flash-vision-exp`。
+- DeepSeek Vision 使用最小 Chat Completions 请求，不发送非必要的 thinking 与 image detail 字段。
+- 图片内容块仅允许出现在 user 消息，按实际图片内容检测 MIME 并生成 base64 data URL。
+- 新增脱敏错误分类，不记录远端原始正文、API Key、消息正文或 base64 图片数据。
+- 扩展 smoke/offline 测试，覆盖 endpoint、模型、请求 JSON、角色、MIME/base64、超时和脱敏。
+
 ## 2026-08-31 · MyAI V1.3 — DeepSeek Vision 更新
 
 ### 新增

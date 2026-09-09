@@ -84,3 +84,86 @@ python tests\smoke_test.py
 4. 本次离线检查不等同于真实 API 或 GUI 人工验收；账号权限、网络和实际识图质量需要步骤 2–3 验证。
 
 交付包不包含 `.env`、聊天数据库或历史图片。更新原项目时请保留原数据库及图片目录，备份后覆盖源码；不要把交付包当作包含旧聊天数据的完整备份。
+
+## 2026-09-09 HTTP 400 根因与修复
+
+本次基于用户实际运行并回传的项目检查配置（只比较配置项，不输出值）。确认
+`DEEPSEEK_API_KEY`、DeepSeek Provider 和官方 API 根地址均有效，但运行时
+`DEEPSEEK_VISION_MODEL` 不是官方模型名，而是被误填成了与 `DEEPSEEK_API_KEY` 相同的值；旧日志把 model 显示为
+`[redacted]` 正是模型字段误填密钥的证据。错误的 model 被原样发往 API，触发 HTTP 400。
+
+修复后，DeepSeek Vision 配置仅接受当前官方模型
+`deepseek-v4-flash-vision-exp`；环境变量误填或拼写错误时安全回退到该模型，直接构造
+错误配置的扩展代码则在联网前给出本地错误。DeepSeek 请求使用官方最小格式，不附加
+thinking、detail、temperature、tools 或 response_format；最终 HTTP JSON 只有 `model` 和
+`messages`。历史图片仍被保留，但图片块只能来自 user 消息。
+
+400 日志现在附加安全的 `remote=` 分类，例如 `model_does_not_support_image`、
+`image_must_be_in_user_message`、`invalid_image_base64` 或 `request_too_large`。远端任意正文、
+请求头、API Key、消息正文和 base64 都不会写入日志；无法安全识别的远端 message 显示为
+`unrecognized_remote_message_hidden`。
+
+## 2026-08-31 Vision 故障修复说明（历史记录）
+
+### 结论与证据边界
+
+原压缩包没有 `.env`、运行日志或真实 API 错误，因此无法确认用户当时的实际 Provider、账户权限、网络状态或 HTTP 状态码。不能把某一个远端原因当作已经复现的根因。
+
+已经确认的代码缺陷：
+
+- `ai.py` 强制传入视觉超时 45 秒，覆盖 `MYAI_VISION_TIMEOUT`，调整配置无法延长等待。
+- DeepSeek Vision 最终改为官方最小请求，不再额外传 thinking 控制参数。
+- API 异常被统一捕获并丢弃，HTTP 状态及错误类别全部消失，这是只能看到通用提示的确定根因。
+- 图片 MIME 原先按扩展名猜测，且没有检查 API 图片尺寸及累计请求体限制。这些属于防御性修复，并非已经证明的此次触发原因。
+
+原来的默认 Provider、模型名、API 根地址、`user.content` 中的 `text` / `image_url` 结构是正确的，不需要换成另一个厂商或另一个 API。
+
+### 官方核对（2026-08-31）
+
+使用 OpenAI SDK 的 `client.chat.completions.create`：
+
+- API 根地址：`https://api.deepseek.com`
+- HTTP endpoint：`POST https://api.deepseek.com/chat/completions`
+- 模型：`deepseek-v4-flash-vision-exp`
+- Key：本项目读取 `DEEPSEEK_API_KEY`，由 SDK 放入认证头。
+- 图片块：`{"type":"image_url","image_url":{"url":"data:image/png;base64,..."}}`
+- 图片只放在 user 消息中。无需切换到 Responses 或 Anthropic 接口。
+- DeepSeek Vision 不附加额外参数；SDK 超时只控制客户端，不进入 HTTP JSON。
+
+来源：[Vision](https://api-docs.deepseek.com/guides/vision/)、[Thinking Mode](https://api-docs.deepseek.com/guides/thinking_mode/)、[API 入门](https://api-docs.deepseek.com/)。
+
+### 配置与诊断
+
+已有 `.env` 不会自动被模板覆盖。确认 `MYAI_VISION_PROVIDER=deepseek`，`DEEPSEEK_VISION_MODEL=deepseek-v4-flash-vision-exp`，`DEEPSEEK_BASE_URL=https://api.deepseek.com`，`MYAI_VISION_TIMEOUT=120`。保留本机 `DEEPSEEK_API_KEY`。文字配置保留 `MYAI_LLM_PROVIDER=deepseek`、`DEEPSEEK_MODEL=deepseek-v4-flash`、`MYAI_LLM_TIMEOUT=30`。不需要 OPENAI_API_KEY。
+
+进程环境变量优先于 `.env`；旧的 `MYAI_VISION_PROVIDER=openai` 仍会明确选择 OpenAI。修改后完全退出再启动。不要把完整 `/chat/completions` 路径写入 base_url。120 秒为 SDK 操作超时，不是整个聊天流程的总时限；状态分析和标题生成还有独立请求。Vision 禁止 SDK 自动重试，避免叠加等待。
+
+从终端执行 `python gui.py` 可查看安全日志。日志显示实际 provider、model、endpoint、key 是否存在、超时、HTTP 状态、异常类型及经过允许列表识别的 `remote=` 错误类别。远端原始错误体可能回显任意凭据，因此原始正文不记录；也不记录请求头、消息正文、base64 或 traceback。未知错误内容一律隐藏。默认输出到终端，不新建日志文件。请勿开启 SDK 的调试级别请求日志。
+
+常见结果：401 检查 Key；402 检查余额；403 检查权限；404 检查模型和地址；400 检查模型能力及图片格式/尺寸；429 稍后重试；5xx 服务端故障；APITimeoutError 检查网络并适当增大超时；APIConnectionError 检查代理、网络或证书。HTTP N/A 表示没有可用的 HTTP 状态，并非 200。
+
+### 修改文件
+
+`llm/config.py`：有效超时默认 120 秒、拒绝非有限超时、纠正无效/凭据形态的模型配置、配置 repr 不暴露 Key。
+`llm/deepseek_vision.py`：校验官方模型并构造最小 DeepSeek Vision 请求。
+`llm/openai_vision.py`：真实格式 MIME、无损 base64、必要时转 PNG、尺寸/体积/数量检查、地址检查、安全错误封装、禁用自动重试。
+`llm/diagnostics.py`：新增安全诊断。
+`ai.py`：主聊天尊重 Provider 超时，返回安全错误信息。
+`context.py`：历史图片仅从 user 消息构建，异常 assistant 图片元数据不会发到 API。
+`gui.py`：最外层异常也经过安全诊断。
+`.env.example`、`README.md`、`requirements.txt`、`tests/smoke_test.py`、`tests/vision_regression_test.py`：配置、文档及回归检查。
+
+已检查但无需改变：`llm/base.py`、`llm/deepseek.py`、`llm/__init__.py`、`media.py`、`memory.py`。Provider 解耦和持久化结构保持不变。
+
+### 离线验证与升级验收
+
+```powershell
+python -m pip install -r requirements.txt
+python -m compileall -q .
+python tests/smoke_test.py
+python tests/vision_regression_test.py
+```
+
+构造层使用假 Key 和 HTTP MockTransport，不发真实模型请求。覆盖准确 endpoint、最小 HTTP JSON、超时传递、真实 MIME/base64、图片仅处于 user 消息、状态码错误、安全远端分类、网络异常、脱敏、OpenAI 隔离、消息不被原地修改、三类消息和图片历史；失败时只保存用户消息，不伪造 assistant 回复。SDK 兼容验证使用项目锁定的 openai 3.6.0。GUI 未人工点击验收；没有消耗真实 Key 额度进行联网请求。
+
+升级前备份原项目。覆盖源码时保留原 `.env`、`memory.db` 和图片目录；不要删除 `%LOCALAPPDATA%/MyAI/images` 或自定义 `MYAI_DATA_DIR`。新包不携带个人数据。先新建会话测试纯文字，再发送小 PNG/JPG 和“这是啥”。若失败，记录屏幕及终端的安全错误摘要，不要提供 Key 或 `.env`。成功后重启程序，在原会话追问图片，验证历史仍可用。GUI 历史保持原有文件名占位显示，不新增历史缩略图。

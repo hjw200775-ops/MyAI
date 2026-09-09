@@ -45,7 +45,7 @@ class ContextBuilder:
         history = load_message_records(conversation_id, limit=max(0, int(limit)))
         messages: list[dict[str, Any]] = []
         for row in history:
-            image = resolve_image(row["image_path"])
+            image = resolve_image(row["image_path"]) if row["role"] == "user" else None
             if image is None:
                 messages.append({"role": row["role"], "content": row["content"] or "[图片资源已不可用]"})
                 continue
@@ -65,4 +65,3 @@ class ContextBuilder:
 
 
 default_context_builder = ContextBuilder()
-

@@ -280,8 +280,9 @@ def ask_ai(user_text, image_path, conversation_id):
         ai_reply, saved_memory = chat(user_text, conversation_id, image_path=image_path)
         title = generate_conversation_title(conversation_id)
         result_queue.put((conversation_id, ai_reply, saved_memory, title))
-    except Exception:
-        result_queue.put((conversation_id, "处理消息时发生错误，请稍后再试。", None, None))
+    except Exception as exc:
+        from llm.diagnostics import report_error
+        result_queue.put((conversation_id, "处理消息失败：" + report_error(exc), None, None))
 
 
 def show_ai_reply(conversation_id, ai_reply, saved_memory, _generated_title):
@@ -344,4 +345,3 @@ render_current_conversation()
 input_box.focus()
 app.after(50, process_results)
 app.mainloop()
-

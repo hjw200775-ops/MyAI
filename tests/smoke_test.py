@@ -36,7 +36,7 @@ def main() -> None:
         assert isinstance(create_vision_provider(), DeepSeekVisionProvider)
         with patch.dict(os.environ, {"DEEPSEEK_VISION_MODEL": "custom-vision",
                                      "DEEPSEEK_BASE_URL": "https://example.invalid"}):
-            assert VisionConfig.from_env().model == "custom-vision"
+            assert VisionConfig.from_env().model == "deepseek-v4-flash-vision-exp"
             assert VisionConfig.from_env().base_url == LLMConfig.from_env().base_url
         with patch.dict(os.environ, {"MYAI_VISION_PROVIDER": "openai", "OPENAI_API_KEY": "offline-openai"}):
             fallback = VisionConfig.from_env()
@@ -103,8 +103,10 @@ def main() -> None:
         assert original == snapshot
         assert captured[-1]["model"] == "deepseek-v4-flash-vision-exp"
         assert captured[-1]["timeout"] == 12
+        assert "extra_body" not in captured[-1]
         assert captured[-1]["response_format"] == {"type": "json_object"}
         assert captured[-1]["messages"][0]["content"][1]["image_url"]["url"].startswith("data:image/png;base64,")
+        assert "detail" not in captured[-1]["messages"][0]["content"][1]["image_url"]
         external = [{"role": "user", "content": [{"type": "image_url",
                     "image_url": {"url": "https://example.invalid/photo.png"}}]}]
         assert _prepare_messages(external) == external
@@ -161,7 +163,17 @@ def main() -> None:
         # A text follow-up with historical images must still use vision.
         set_vision_provider(vision)
         assert chat("再看看之前的图片", conversation_id)[0] == "vision reply"
+        assert captured[-1]["timeout"] == vision.config.timeout
         assert sum(isinstance(m["content"], list) for m in captured[-1]["messages"]) == 2
+        # Failed API calls preserve user input, but never save a fake assistant reply.
+        def fail(**request):
+            raise RuntimeError("offline-secret-that-must-not-appear")
+        vision._client.chat.completions.create = fail
+        before = len(load_message_records(conversation_id))
+        failure = chat("再试一次", conversation_id)[0]
+        assert "HTTP N/A" in failure and "offline-secret" not in failure
+        after = load_message_records(conversation_id)
+        assert len(after) == before + 1 and after[-1]["role"] == "user"
         for row in records:
             if row["image_path"]:
                 resolve_image(row["image_path"]).unlink()
