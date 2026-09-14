@@ -55,7 +55,7 @@ class VisionTests(unittest.TestCase):
             self.assertEqual(str(request.url), "https://api.deepseek.com/chat/completions")
             data = json.loads(request.content)
             self.assertEqual(set(data), {"model", "messages"})
-            self.assertEqual(data["model"], "deepseek-v4-flash-vision-exp")
+            self.assertEqual(data["model"], "deepseek-flash")
             self.assertEqual(request.extensions["timeout"]["read"], 177)
             url = data["messages"][1]["content"][1]["image_url"]["url"]
             self.assertEqual(set(data["messages"][1]["content"][1]["image_url"]), {"url"})
@@ -77,14 +77,14 @@ class VisionTests(unittest.TestCase):
             with self.subTest(status=status):
                 def handle(request):
                     return httpx.Response(status, json={"error": {"message":
-                        "arbitrary-fake-secret authorization-value data:image/png;base64,PRIVATE",
+                        "arbitrary-fake-secret Bearer unrelated-secret data:image/png;base64,PRIVATE",
                         "type": "remote-private-type", "code": "private-code"}})
                 with self.assertLogs(logger, level="ERROR") as logs:
                     with self.assertRaises(ProviderCallError) as caught:
                         self.provider(handle).chat(self.messages)
                 output = str(caught.exception) + str(logs.output)
                 self.assertIn(f"HTTP {status}", output)
-                for secret in ("arbitrary-fake-secret", "authorization-value", "PRIVATE", "private-code"):
+                for secret in ("arbitrary-fake-secret", "unrelated-secret", "PRIVATE", "private-code"):
                     self.assertNotIn(secret, output)
 
     def test_known_remote_error_is_specific_but_safe(self):
@@ -133,10 +133,10 @@ class VisionTests(unittest.TestCase):
         for invalid in ("nan", "inf", "-1", "bad"):
             with patch.dict(os.environ, {"MYAI_VISION_TIMEOUT": invalid}):
                 self.assertEqual(VisionConfig.from_env().timeout, 120)
-        for invalid_model in ("typo-model", "fake-key-accidentally-pasted"):
+        for invalid_model in ("typo-model", "sk-secret-accidentally-pasted"):
             with patch.dict(os.environ, {"MYAI_VISION_PROVIDER": "deepseek",
                                          "DEEPSEEK_VISION_MODEL": invalid_model,
-                                         "DEEPSEEK_API_KEY": "fake-key-accidentally-pasted"}):
+                                         "DEEPSEEK_API_KEY": "sk-secret-accidentally-pasted"}):
                 config = VisionConfig.from_env()
                 self.assertEqual(config.model, DEEPSEEK_VISION_MODEL)
                 self.assertNotIn(config.api_key, repr(config))

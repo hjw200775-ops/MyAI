@@ -1,5 +1,15 @@
 # 更新日志
 
+## 2026-09-14 · MyAI V1.3.2
+
+- 默认文本模型切换为 `deepseek-flash`（DeepSeek V4.1 Flash 的 API 模型名）。
+- 默认视觉模型也统一为 `deepseek-flash`；保留独立的文本 / Vision Provider 架构及显式可选的 OpenAI Vision。
+- 继续沿用 V1.3 的图片上传、Vision Provider、DeepSeek Vision HTTP 400 请求修复和脱敏错误处理；不新增这些已有功能。
+- 配置仍通过 `.env` / `.env.example`，模板密钥留空，不硬编码密钥。已有 `.env` 不会自动更新，请在本机将 `DEEPSEEK_MODEL` 和 `DEEPSEEK_VISION_MODEL` 都改为 `deepseek-flash`。
+- 同步默认值、视觉模型校验和离线回归测试；compileall、smoke test 和 12 项离线 Vision 回归测试通过。未发送真实 API 请求，未进行 GUI 人工验收。
+
+以下条目为历史记录，旧模型名仅描述当时版本。
+
 ## 2026-09-09 · DeepSeek Vision HTTP 400 修复
 
 - 修复 `DEEPSEEK_VISION_MODEL` 误填时导致的 HTTP 400，并固定使用 `deepseek-v4-flash-vision-exp`。

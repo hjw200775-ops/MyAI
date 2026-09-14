@@ -33,3 +33,20 @@ logs/
 .DS_Store
 Thumbs.db
 *.db-*
+
+# Additional local environments, private data and temporary files
+.venv*/
+venv*/
+*.sqlite-*
+*.sqlite3-*
+*.db-journal
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*.pid
+*.sql
+chat_history/
+history/
+private-data/

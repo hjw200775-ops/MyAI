@@ -3,7 +3,7 @@ from pathlib import Path
 from dataclasses import dataclass, field
 import math
 
-DEEPSEEK_VISION_MODEL = "deepseek-v4-flash-vision-exp"
+DEEPSEEK_VISION_MODEL = "deepseek-flash"
 
 try:
     from dotenv import load_dotenv
@@ -33,7 +33,7 @@ class LLMConfig:
     provider: str = "deepseek"
     api_key: str | None = field(default=None, repr=False)
     base_url: str = "https://api.deepseek.com"
-    model: str = "deepseek-v4-flash"
+    model: str = "deepseek-flash"
     timeout: float = 30.0
 
     @classmethod
@@ -43,7 +43,7 @@ class LLMConfig:
             provider=os.getenv("MYAI_LLM_PROVIDER", "deepseek").strip().lower(),
             api_key=os.getenv("DEEPSEEK_API_KEY"),
             base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com").strip(),
-            model=os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash").strip(),
+            model=os.getenv("DEEPSEEK_MODEL", "deepseek-flash").strip(),
             timeout=_positive_float(os.getenv("MYAI_LLM_TIMEOUT"), 30.0),
         )
 
@@ -66,7 +66,7 @@ class VisionConfig:
         if is_openai:
             model = (raw_model or "gpt-5.4-mini").strip()
         else:
-            # DeepSeek currently exposes one Chat Completions vision model.  A
+            # Only accept the configured canonical DeepSeek vision model. A
             # typo here (or accidentally pasting the API key into this field)
             # otherwise reaches the server as a misleading HTTP 400.  Keep the
             # secret untouched in the environment, but never use it as a model.

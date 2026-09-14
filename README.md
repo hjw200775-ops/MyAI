@@ -1,6 +1,16 @@
-# MyAI V1.3（第一阶段）
+# MyAI V1.3.2
 
-## 本次更新 · 2026-08-31
+## V1.3.2 更新 · 2026-09-14
+
+- 默认文本模型切换为 `deepseek-flash`（DeepSeek V4.1 Flash 的 API 模型名）。
+- 默认视觉模型也统一为 `deepseek-flash`；保留独立的文本 / Vision Provider 架构及显式可选的 OpenAI Vision。
+- 继续沿用 V1.3 的图片上传、Vision Provider、DeepSeek Vision HTTP 400 请求修复和脱敏错误处理；不新增这些已有功能。
+- 配置仍通过 `.env` / `.env.example`，模板密钥留空，不硬编码密钥。已有 `.env` 不会自动更新，请在本机将 `DEEPSEEK_MODEL` 和 `DEEPSEEK_VISION_MODEL` 都改为 `deepseek-flash`。
+- 同步默认值、视觉模型校验和离线回归测试；compileall、smoke test 和 12 项离线 Vision 回归测试通过。未发送真实 API 请求，未进行 GUI 人工验收。
+
+模型名称依据：[DeepSeek 2026-09-10 官方公告](https://deepseek.com/news/deepseek-v4-1-flash/)。
+
+## V1.3 更新 · 2026-08-31（历史记录）
 
 - **视觉模型切换**：默认使用 DeepSeek `deepseek-v4-flash-vision-exp`，与文字模型共用 DeepSeek API Key 和服务地址。
 - **保持原有功能**：文字模型、GUI 分层、三类消息和历史图片路径持久化保留；base64 仅用于请求，不存数据库。
@@ -9,7 +19,7 @@
 
 完整修改文件清单与验证范围见 [CHANGELOG.md](CHANGELOG.md)。
 
-本版在 V1.2 基础上增加图片选择、发送前预览与取消、纯图片/纯文字/文字加图片消息，以及可替换的 Vision Provider。多会话、会话管理、静态头像、长期记忆、情绪、关系和 Context 架构均保留。
+V1.3 在 V1.2 基础上增加图片选择、发送前预览与取消、纯图片/纯文字/文字加图片消息，以及可替换的 Vision Provider。多会话、会话管理、静态头像、长期记忆、情绪、关系和 Context 架构均保留。
 
 ## 配置
 
@@ -18,18 +28,18 @@
 ```env
 DEEPSEEK_API_KEY=你的_DeepSeek_Key
 MYAI_LLM_PROVIDER=deepseek
-DEEPSEEK_MODEL=deepseek-v4-flash
+DEEPSEEK_MODEL=deepseek-flash
 
 DEEPSEEK_BASE_URL=https://api.deepseek.com
 MYAI_VISION_PROVIDER=deepseek
-DEEPSEEK_VISION_MODEL=deepseek-v4-flash-vision-exp
+DEEPSEEK_VISION_MODEL=deepseek-flash
 ```
 
-DeepSeek V4 Flash 继续处理无图片上下文的文字对话、标题、记忆和状态分析。含当前或历史图片的上下文默认交给独立的 DeepSeek Vision Provider，使用同一个 `DEEPSEEK_API_KEY` 和 `DEEPSEEK_BASE_URL`。两者的模型名独立，视觉模型默认为 `deepseek-v4-flash-vision-exp`。
+DeepSeek V4.1 Flash 继续处理无图片上下文的文字对话、标题、记忆和状态分析。含当前或历史图片的上下文默认交给独立的 DeepSeek Vision Provider，使用同一个 `DEEPSEEK_API_KEY` 和 `DEEPSEEK_BASE_URL`。两者保留独立配置入口，默认模型名均为 `deepseek-flash`。
 
-视觉请求使用 OpenAI-compatible Chat Completions，user 消息包含 `text` 与 `image_url` 内容块。本地图片只在 Provider 发送请求时转成 base64 data URL，不改变原始上下文，也不将编码写入数据库。接口依据：[DeepSeek 官方图像理解文档](https://api-docs.deepseek.com/zh-cn/guides/vision/)。实验模型是否可调用仍取决于账号权限和服务可用性。
+视觉请求使用 OpenAI-compatible Chat Completions，user 消息包含 `text` 与 `image_url` 内容块。本地图片只在 Provider 发送请求时转成 base64 data URL，不改变原始上下文，也不将编码写入数据库。接口依据：[DeepSeek 官方图像理解文档](https://api-docs.deepseek.com/zh-cn/guides/vision/)。实际调用仍取决于账号权限和服务可用性。
 
-**从旧配置迁移：** 若已有 `MYAI_VISION_PROVIDER=openai` 或 `none`，需在本机手动改为 `deepseek`；新增 `DEEPSEEK_VISION_MODEL`，不要把文字模型名改成视觉模型。无需新增第二个 Key。程序不会覆盖现有配置。
+**从旧配置迁移：** 若已有 `MYAI_VISION_PROVIDER=openai` 或 `none`，需在本机手动改为 `deepseek`；新增 `DEEPSEEK_VISION_MODEL`，将 `DEEPSEEK_MODEL` 和 `DEEPSEEK_VISION_MODEL` 都设为 `deepseek-flash`。无需新增第二个 Key。程序不会覆盖现有配置。
 
 保留 OpenAI Vision 作为显式可选项：设置 `MYAI_VISION_PROVIDER=openai`，并配置 `OPENAI_API_KEY`、`OPENAI_BASE_URL`（默认 `https://api.openai.com/v1`）和 `OPENAI_VISION_MODEL`（默认 `gpt-5.4-mini`）。不会在 DeepSeek 失败后自动把图片传给其他厂商。设置 `none` 或 `disabled` 可禁用视觉服务。
 
@@ -71,6 +81,7 @@ memory.py              兼容迁移与最小图片历史支持
 ```powershell
 python -m compileall -q .
 python tests\smoke_test.py
+python tests\vision_regression_test.py
 ```
 
 测试使用假的离线 Provider，不发起网络请求，也不读取或打印真实 `.env` Key。
@@ -85,7 +96,9 @@ python tests\smoke_test.py
 
 交付包不包含 `.env`、聊天数据库或历史图片。更新原项目时请保留原数据库及图片目录，备份后覆盖源码；不要把交付包当作包含旧聊天数据的完整备份。
 
-## 2026-09-09 HTTP 400 根因与修复
+## 2026-09-09 HTTP 400 根因与修复（历史记录）
+
+以下旧模型名记录当时的修复；V1.3.2 当前默认与校验模型已更新为 `deepseek-flash`，请求格式与脱敏策略继续保留。
 
 本次基于用户实际运行并回传的项目检查配置（只比较配置项，不输出值）。确认
 `DEEPSEEK_API_KEY`、DeepSeek Provider 和官方 API 根地址均有效，但运行时
@@ -132,9 +145,9 @@ thinking、detail、temperature、tools 或 response_format；最终 HTTP JSON �
 
 来源：[Vision](https://api-docs.deepseek.com/guides/vision/)、[Thinking Mode](https://api-docs.deepseek.com/guides/thinking_mode/)、[API 入门](https://api-docs.deepseek.com/)。
 
-### 配置与诊断
+### 当前配置与诊断（V1.3.2）
 
-已有 `.env` 不会自动被模板覆盖。确认 `MYAI_VISION_PROVIDER=deepseek`，`DEEPSEEK_VISION_MODEL=deepseek-v4-flash-vision-exp`，`DEEPSEEK_BASE_URL=https://api.deepseek.com`，`MYAI_VISION_TIMEOUT=120`。保留本机 `DEEPSEEK_API_KEY`。文字配置保留 `MYAI_LLM_PROVIDER=deepseek`、`DEEPSEEK_MODEL=deepseek-v4-flash`、`MYAI_LLM_TIMEOUT=30`。不需要 OPENAI_API_KEY。
+已有 `.env` 不会自动被模板覆盖。确认 `MYAI_VISION_PROVIDER=deepseek`，`DEEPSEEK_VISION_MODEL=deepseek-flash`，`DEEPSEEK_BASE_URL=https://api.deepseek.com`，`MYAI_VISION_TIMEOUT=120`。保留本机 `DEEPSEEK_API_KEY`。文字配置保留 `MYAI_LLM_PROVIDER=deepseek`、`DEEPSEEK_MODEL=deepseek-flash`、`MYAI_LLM_TIMEOUT=30`。不需要 OPENAI_API_KEY。
 
 进程环境变量优先于 `.env`；旧的 `MYAI_VISION_PROVIDER=openai` 仍会明确选择 OpenAI。修改后完全退出再启动。不要把完整 `/chat/completions` 路径写入 base_url。120 秒为 SDK 操作超时，不是整个聊天流程的总时限；状态分析和标题生成还有独立请求。Vision 禁止 SDK 自动重试，避免叠加等待。
 
