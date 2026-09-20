@@ -6,7 +6,7 @@ from tkinter import filedialog, messagebox
 import customtkinter as ctk
 from PIL import Image
 
-from ai import chat, generate_conversation_title, refresh_system_prompt
+from ai import chat, process_post_reply_tasks, refresh_system_prompt
 from emotion import get_emotion
 from media import SUPPORTED_IMAGE_EXTENSIONS, validate_image
 from memory import (create_conversation, delete_conversation, delete_memory,
@@ -25,12 +25,13 @@ if not AVATAR_PATH.is_file():
     raise FileNotFoundError(f"找不到小悠头像资源：{AVATAR_PATH}")
 
 app = ctk.CTk()
-app.title("MyAI v1.3")
+app.title("MyAI v1.4.1")
 app.geometry("940x700")
 app.minsize(780, 580)
 
 current_conversation_id = get_or_create_current_conversation()
 result_queue = queue.Queue()
+background_result_queue = queue.Queue()
 request_in_progress = False
 selected_image_path = None
 preview_ctk_image = None
@@ -278,11 +279,24 @@ def set_input_enabled(enabled):
 def ask_ai(user_text, image_path, conversation_id):
     try:
         ai_reply, saved_memory = chat(user_text, conversation_id, image_path=image_path)
-        title = generate_conversation_title(conversation_id)
-        result_queue.put((conversation_id, ai_reply, saved_memory, title))
+        result_queue.put((conversation_id, ai_reply, saved_memory, None))
+        latest = load_message_records(conversation_id, limit=1)
+        if (user_text and latest and latest[-1]["role"] == "assistant" and
+                latest[-1]["content"] == ai_reply):
+            threading.Thread(
+                target=run_background_tasks,
+                args=(user_text, ai_reply, conversation_id), daemon=True,
+            ).start()
     except Exception as exc:
         from llm.diagnostics import report_error
         result_queue.put((conversation_id, "处理消息失败：" + report_error(exc), None, None))
+
+
+def run_background_tasks(user_text, ai_reply, conversation_id):
+    saved_memory, title = process_post_reply_tasks(
+        user_text, ai_reply, conversation_id
+    )
+    background_result_queue.put((conversation_id, saved_memory, title))
 
 
 def show_ai_reply(conversation_id, ai_reply, saved_memory, _generated_title):
@@ -304,10 +318,25 @@ def show_ai_reply(conversation_id, ai_reply, saved_memory, _generated_title):
     set_input_enabled(True)
 
 
+def show_background_result(conversation_id, saved_memory, generated_title):
+    if saved_memory and conversation_id == current_conversation_id:
+        chat_box.configure(state="normal")
+        chat_box.insert("end", f"[已记住或更新：{saved_memory}]\n\n")
+        chat_box.configure(state="disabled")
+        chat_box.see("end")
+    if generated_title:
+        refresh_conversation_list()
+
+
 def process_results():
     try:
         while True:
             show_ai_reply(*result_queue.get_nowait())
+    except queue.Empty:
+        pass
+    try:
+        while True:
+            show_background_result(*background_result_queue.get_nowait())
     except queue.Empty:
         pass
     app.after(50, process_results)

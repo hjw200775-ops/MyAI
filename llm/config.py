@@ -28,6 +28,25 @@ def _positive_float(raw: str | None, default: float) -> float:
     return value if math.isfinite(value) and value > 0 else default
 
 
+def _bounded_int(raw: str | None, default: int, minimum: int, maximum: int) -> int:
+    try:
+        value = int(raw) if raw is not None else default
+    except (TypeError, ValueError):
+        return default
+    return max(minimum, min(maximum, value))
+
+
+def _boolean(raw: str | None, default: bool) -> bool:
+    if raw is None:
+        return default
+    value = raw.strip().lower()
+    if value in {"1", "true", "yes", "on"}:
+        return True
+    if value in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
 @dataclass(frozen=True)
 class LLMConfig:
     provider: str = "deepseek"
@@ -35,12 +54,32 @@ class LLMConfig:
     base_url: str = "https://api.deepseek.com"
     model: str = "deepseek-flash"
     timeout: float = 30.0
+    keep_alive: str = "10m"
+    num_ctx: int = 4096
+    think: bool = False
 
     @classmethod
     def from_env(cls) -> "LLMConfig":
         _load_environment()
+        provider = os.getenv("TEXT_PROVIDER")
+        if provider is None:
+            provider = os.getenv("MYAI_LLM_PROVIDER", "deepseek")
+        provider = provider.strip().lower()
+        if provider == "ollama":
+            return cls(
+                provider=provider,
+                api_key=None,
+                base_url=os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").strip(),
+                model=os.getenv("OLLAMA_MODEL", "qwen3.5:2b").strip(),
+                timeout=_positive_float(
+                    os.getenv("OLLAMA_TIMEOUT", os.getenv("MYAI_LLM_TIMEOUT")), 60.0
+                ),
+                keep_alive=os.getenv("OLLAMA_KEEP_ALIVE", "10m").strip() or "10m",
+                num_ctx=_bounded_int(os.getenv("OLLAMA_NUM_CTX"), 4096, 512, 32768),
+                think=_boolean(os.getenv("OLLAMA_THINK"), False),
+            )
         return cls(
-            provider=os.getenv("MYAI_LLM_PROVIDER", "deepseek").strip().lower(),
+            provider=provider,
             api_key=os.getenv("DEEPSEEK_API_KEY"),
             base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com").strip(),
             model=os.getenv("DEEPSEEK_MODEL", "deepseek-flash").strip(),

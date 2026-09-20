@@ -1,5 +1,13 @@
 # 更新日志
 
+## 2026-09-21 · MyAI V1.4.1
+
+- 基于最新 V1.3.2 `deepseek-flash` 基线新增独立 Ollama 纯文字 Provider；图片仍由原 DeepSeek Vision 处理。
+- 新增 `TEXT_PROVIDER`、`OLLAMA_BASE_URL`、`OLLAMA_MODEL`、`OLLAMA_TIMEOUT`、`OLLAMA_KEEP_ALIVE`、`OLLAMA_NUM_CTX`、`OLLAMA_THINK`；保留旧配置名兼容。
+- 正文回复先显示；情绪、关系、记忆和标题合并为一次后台分析，避免辅助请求串行阻塞 GUI。
+- 新增 Ollama 离线请求与延迟流程测试；保留现有 smoke 和 Vision 回归测试。
+- 未将 `.env`、API Key、数据库、历史图片或生成缓存加入仓库。
+
 ## 2026-09-14 · MyAI V1.3.2
 
 - 默认文本模型切换为 `deepseek-flash`（DeepSeek V4.1 Flash 的 API 模型名）。

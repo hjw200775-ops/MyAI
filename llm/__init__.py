@@ -2,6 +2,7 @@ from .base import LLMProvider, Message, VisionNotSupportedError
 from .config import LLMConfig, VisionConfig
 from .deepseek import DeepSeekProvider
 from .deepseek_vision import DeepSeekVisionProvider
+from .ollama import OllamaProvider
 from .openai_vision import OpenAIVisionProvider
 
 _default_provider: LLMProvider | None = None
@@ -12,7 +13,11 @@ def create_provider(config: LLMConfig | None = None) -> LLMProvider:
     config = config or LLMConfig.from_env()
     if config.provider == "deepseek":
         return DeepSeekProvider(config)
-    raise ValueError(f"不支持的 LLM Provider：{config.provider}。V1.2 仅实现 deepseek；以后可在这里注册 Ollama。")
+    if config.provider == "ollama":
+        return OllamaProvider(config)
+    raise ValueError(
+        f"不支持的文本 Provider：{config.provider}。请将 TEXT_PROVIDER 设为 deepseek 或 ollama。"
+    )
 
 
 def get_default_provider() -> LLMProvider:
@@ -53,7 +58,7 @@ def set_vision_provider(provider: LLMProvider | None) -> None:
     _vision_provider = provider
 
 
-__all__ = ["LLMConfig", "VisionConfig", "LLMProvider", "Message",
+__all__ = ["LLMConfig", "VisionConfig", "LLMProvider", "Message", "OllamaProvider",
            "VisionNotSupportedError", "create_provider", "create_vision_provider",
            "get_default_provider", "get_vision_provider", "set_default_provider",
            "set_vision_provider"]

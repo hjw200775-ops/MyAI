@@ -1,4 +1,46 @@
-# MyAI V1.3.2
+# MyAI V1.4.1
+
+## V1.4.1 更新 · 2026-09-21
+
+在最新 V1.3.2 的 `deepseek-flash` 基线上新增 Ollama 本地纯文字 Provider。文字服务由 `TEXT_PROVIDER=deepseek|ollama` 选择；图片及包含历史图片的对话仍使用原 DeepSeek Vision 路线，默认模型仍是 `deepseek-flash`。旧的 `MYAI_LLM_PROVIDER` 仍可使用，但 `TEXT_PROVIDER` 优先。
+
+V1.4.1 优先生成并显示正文；情绪、关系、长期记忆和标题分析合并成一次 15 秒上限的后台请求，不再阻塞回复显示。Ollama 默认关闭额外思考、保活 10 分钟，并将上下文设为 4096。功能代码见 `llm/ollama.py`，GUI 暂无切换按钮。
+
+### 本地文字配置
+
+从 `.env.example` 复制为本机 `.env`，不要提交或分享真实 Key。在 `.env` 中设置：
+
+```env
+TEXT_PROVIDER=ollama
+OLLAMA_BASE_URL=http://127.0.0.1:11434
+OLLAMA_MODEL=qwen3.5:2b
+OLLAMA_TIMEOUT=60
+OLLAMA_KEEP_ALIVE=10m
+OLLAMA_NUM_CTX=4096
+OLLAMA_THINK=false
+
+# 图片识别仍需 DeepSeek，保留原有 Key 与模型配置。
+DEEPSEEK_API_KEY=你的_DeepSeek_Key
+DEEPSEEK_MODEL=deepseek-flash
+MYAI_VISION_PROVIDER=deepseek
+DEEPSEEK_VISION_MODEL=deepseek-flash
+```
+
+从 [Ollama 官方 Windows 页面](https://ollama.com/download/windows)安装 Ollama 后，执行 `ollama run qwen3.5:2b` 下载并试聊。安装程序通常会启动本地服务；若已占用 11434 端口，不要重复运行 `ollama serve`。配置修改后完全退出并重启 MyAI：`python gui.py`。`OLLAMA_TIMEOUT` 只控制最长等待时间，不会加快生成。
+
+升级时请备份旧项目，保留原 `.env`、`memory.db` 和托管图片目录；GitHub 仓库不包含这些私人数据。此前曾在截图中展示过的 DeepSeek Key 应先在控制台撤销并更换。
+
+离线验证：
+
+```powershell
+python -m compileall -q .
+python tests\smoke_test.py
+python tests\vision_regression_test.py
+python tests\ollama_provider_test.py
+python tests\latency_regression_test.py
+```
+
+请在本机分别验证 DeepSeek 文字、Ollama 文字、当前及历史图片追问，并测量第一轮与第二轮回复时间。离线测试不会调用真实模型，不能代替 GUI 人工验收。Ollama `keep_alive`、`think`、`options` 字段见其[官方 Chat API 文档](https://docs.ollama.com/api/chat)。
 
 ## V1.3.2 更新 · 2026-09-14
 
