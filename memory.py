@@ -395,4 +395,3 @@ def delete_memory(memory_id):
 
 
 init_database()
-

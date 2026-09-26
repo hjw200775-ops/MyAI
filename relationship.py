@@ -65,4 +65,3 @@ def build_relationship_prompt():
 信任：{state['trust']:.1f}；熟悉：{state['familiarity']:.1f}；亲近：{state['closeness']:.1f}
 {guidance}
 这些数值只用于内部调节称呼距离、记忆引用频率、直接程度和熟悉感，禁止向用户报出。"""
-

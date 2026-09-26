@@ -55,7 +55,7 @@ class VisionTests(unittest.TestCase):
             self.assertEqual(str(request.url), "https://api.deepseek.com/chat/completions")
             data = json.loads(request.content)
             self.assertEqual(set(data), {"model", "messages"})
-            self.assertEqual(data["model"], "deepseek-flash")
+            self.assertEqual(data["model"], "deepseek-v4-flash-vision-exp")
             self.assertEqual(request.extensions["timeout"]["read"], 177)
             url = data["messages"][1]["content"][1]["image_url"]["url"]
             self.assertEqual(set(data["messages"][1]["content"][1]["image_url"]), {"url"})

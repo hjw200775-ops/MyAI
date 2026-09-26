@@ -3,7 +3,7 @@ from pathlib import Path
 from dataclasses import dataclass, field
 import math
 
-DEEPSEEK_VISION_MODEL = "deepseek-flash"
+DEEPSEEK_VISION_MODEL = "deepseek-v4-flash-vision-exp"
 
 try:
     from dotenv import load_dotenv
@@ -52,7 +52,7 @@ class LLMConfig:
     provider: str = "deepseek"
     api_key: str | None = field(default=None, repr=False)
     base_url: str = "https://api.deepseek.com"
-    model: str = "deepseek-flash"
+    model: str = "deepseek-v4-flash"
     timeout: float = 30.0
     keep_alive: str = "10m"
     num_ctx: int = 4096
@@ -61,6 +61,8 @@ class LLMConfig:
     @classmethod
     def from_env(cls) -> "LLMConfig":
         _load_environment()
+        # TEXT_PROVIDER is the V1.4 public setting. Keep the old name as a
+        # fallback so an existing V1.3 .env continues to select DeepSeek.
         provider = os.getenv("TEXT_PROVIDER")
         if provider is None:
             provider = os.getenv("MYAI_LLM_PROVIDER", "deepseek")
@@ -82,7 +84,7 @@ class LLMConfig:
             provider=provider,
             api_key=os.getenv("DEEPSEEK_API_KEY"),
             base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com").strip(),
-            model=os.getenv("DEEPSEEK_MODEL", "deepseek-flash").strip(),
+            model=os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash").strip(),
             timeout=_positive_float(os.getenv("MYAI_LLM_TIMEOUT"), 30.0),
         )
 
@@ -105,7 +107,7 @@ class VisionConfig:
         if is_openai:
             model = (raw_model or "gpt-5.4-mini").strip()
         else:
-            # Only accept the configured canonical DeepSeek vision model. A
+            # DeepSeek currently exposes one Chat Completions vision model.  A
             # typo here (or accidentally pasting the API key into this field)
             # otherwise reaches the server as a misleading HTTP 400.  Keep the
             # secret untouched in the environment, but never use it as a model.

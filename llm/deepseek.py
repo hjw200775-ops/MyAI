@@ -1,6 +1,7 @@
 from typing import TYPE_CHECKING, Any, Mapping, Sequence
 from .base import LLMProvider, Message, VisionNotSupportedError
 from .config import LLMConfig
+from .diagnostics import ProviderCallError
 
 if TYPE_CHECKING:
     from openai import OpenAI
@@ -41,5 +42,10 @@ class DeepSeekProvider(LLMProvider):
         if response_format is not None:
             request["response_format"] = dict(response_format)
         response = self._get_client().chat.completions.create(**request)
-        return str(response.choices[0].message.content or "").strip()
-
+        try:
+            content = response.choices[0].message.content
+        except (AttributeError, IndexError, TypeError):
+            raise ProviderCallError("DeepSeek 返回了无法识别的响应，请稍后重试。") from None
+        if not isinstance(content, str) or not content.strip():
+            raise ProviderCallError("DeepSeek 返回了空回复，请稍后重试。")
+        return content.strip()

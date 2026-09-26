@@ -32,7 +32,10 @@ def _vision_chat(messages, *, timeout=None):
 
 
 def _clean_title(raw):
-    title = str(raw or "").strip().splitlines()[0]
+    text = str(raw or "").strip()
+    if not text:
+        return ""
+    title = text.splitlines()[0].strip()
     for mark in ('"', "'", "“", "”", "《", "》"):
         title = title.replace(mark, "")
     for prefix in ("标题：", "标题:"):
@@ -264,9 +267,9 @@ title 仅在需要标题时填写 4 到 12 个汉字，否则为空字符串，�
             response_format={"type": "json_object"}, timeout=15,
         ))
     except Exception:
-        return None, None
+        result = None
     if not isinstance(result, dict):
-        return None, None
+        result = {}
 
     state = result.get("state")
     required = {"happiness", "sadness", "anger", "trust", "familiarity", "closeness"}
@@ -278,8 +281,12 @@ title 仅在需要标题时填写 4 到 12 个汉字，否则为空字符串，�
             "trust": (-2, 2), "familiarity": (0, 1), "closeness": (-2, 2),
         }
         values = {key: _bounded_number(state[key], *bounds[key]) for key in required}
-        change_emotion(values["happiness"], values["sadness"], values["anger"])
-        change_relationship(values["trust"], values["familiarity"], values["closeness"])
+        try:
+            change_emotion(values["happiness"], values["sadness"], values["anger"])
+            change_relationship(values["trust"], values["familiarity"], values["closeness"])
+        except Exception:
+            # Auxiliary state persistence must never terminate the GUI worker.
+            pass
 
     saved_memory = None
     memory = result.get("memory")
@@ -291,21 +298,32 @@ title 仅在需要标题时填写 4 到 12 个汉字，否则为空字符串，�
         if isinstance(content, str):
             content = content.strip()
         valid_content = isinstance(content, str) and 0 < len(content) <= 300
-        if action == "add" and memory_id is None and category in VALID_CATEGORIES and valid_content:
-            if save_memory(content, category):
-                saved_memory = content
-        elif (action == "update" and type(memory_id) is int and
-              memory_id in {row[0] for row in existing} and
-              category in VALID_CATEGORIES and valid_content):
-            if update_memory(memory_id, content, category):
-                saved_memory = content
+        try:
+            if action == "add" and memory_id is None and category in VALID_CATEGORIES and valid_content:
+                if save_memory(content, category):
+                    saved_memory = content
+            elif (action == "update" and type(memory_id) is int and
+                  memory_id in {row[0] for row in existing} and
+                  category in VALID_CATEGORIES and valid_content):
+                if update_memory(memory_id, content, category):
+                    saved_memory = content
+        except Exception:
+            # A memory write is helpful, but not required for a successful reply.
+            saved_memory = None
 
     generated_title = None
-    if needs_title and isinstance(result.get("title"), str):
-        title = _clean_title(result["title"])
+    if needs_title:
+        title = _clean_title(result.get("title"))
+        if not title or title in {"新对话", "默认会话"}:
+            title = _clean_title(user_input)
+        if not title:
+            title = "新对话"
         if title and title not in {"新对话", "默认会话"}:
-            if rename_conversation(conversation_id, title, only_if_default=True):
-                generated_title = title
+            try:
+                if rename_conversation(conversation_id, title, only_if_default=True):
+                    generated_title = title
+            except Exception:
+                pass
     return saved_memory, generated_title
 
 

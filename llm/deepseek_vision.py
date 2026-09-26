@@ -17,7 +17,7 @@ class DeepSeekVisionProvider(OpenAIVisionProvider):
     def validate_config(self) -> None:
         if self.config.model != DEEPSEEK_VISION_MODEL:
             raise LocalValidationError(
-                "DeepSeek 视觉模型名无效；请将 DEEPSEEK_VISION_MODEL 设为 deepseek-flash"
+                "DeepSeek 视觉模型名无效；请将 DEEPSEEK_VISION_MODEL 设为官方 Vision 模型"
             )
 
     def prepare_messages(self, messages: Sequence[Message]) -> list[dict[str, Any]]:

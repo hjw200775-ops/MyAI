@@ -20,4 +20,3 @@ class LLMProvider(ABC):
 
 class VisionNotSupportedError(RuntimeError):
     """当前 Provider 无法诚实处理图片输入。"""
-

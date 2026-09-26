@@ -25,7 +25,7 @@ if not AVATAR_PATH.is_file():
     raise FileNotFoundError(f"找不到小悠头像资源：{AVATAR_PATH}")
 
 app = ctk.CTk()
-app.title("MyAI v1.4.1")
+app.title("MyAI v1.4.2")
 app.geometry("940x700")
 app.minsize(780, 580)
 
@@ -293,9 +293,13 @@ def ask_ai(user_text, image_path, conversation_id):
 
 
 def run_background_tasks(user_text, ai_reply, conversation_id):
-    saved_memory, title = process_post_reply_tasks(
-        user_text, ai_reply, conversation_id
-    )
+    try:
+        saved_memory, title = process_post_reply_tasks(
+            user_text, ai_reply, conversation_id
+        )
+    except Exception:
+        # Title/memory/state analysis is optional and must not crash this worker.
+        saved_memory, title = None, None
     background_result_queue.put((conversation_id, saved_memory, title))
 
 

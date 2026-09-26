@@ -59,4 +59,3 @@ def resolve_image(relative_name: str | None) -> Path | None:
     name = Path(relative_name).name
     candidate = image_root() / name
     return candidate if candidate.is_file() else None
-

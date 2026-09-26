@@ -41,4 +41,3 @@ def build_character_prompt():
 
 【个人偏好】
 {PREFERENCES}"""
-

@@ -1,4 +1,4 @@
-"""Ollama's local /api/chat transport for V1.4.1 text generation only."""
+"""Ollama's local /api/chat transport for V1.4.2 text generation only."""
 import json
 import socket
 from typing import Any, Mapping, Sequence
@@ -39,7 +39,7 @@ class OllamaProvider(LLMProvider):
              timeout: float | None = None) -> str:
         if any(isinstance(message.get("content"), list) for message in messages):
             raise VisionNotSupportedError(
-                "Ollama 在 MyAI V1.4.1 中只处理纯文字；图片仍由 DeepSeek Vision 处理。"
+                "Ollama 在 MyAI V1.4.2 中只处理纯文字；图片仍由 DeepSeek Vision 处理。"
             )
         if not self.config.model:
             raise ProviderCallError("未设置 OLLAMA_MODEL，请在 .env 中填写已安装的模型名。")

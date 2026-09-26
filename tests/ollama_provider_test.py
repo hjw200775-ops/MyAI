@@ -141,6 +141,13 @@ class OllamaProviderTests(unittest.TestCase):
         with patch("llm.ollama.urlopen", return_value=FakeResponse({"unexpected": True})):
             with self.assertRaisesRegex(ProviderCallError, "无法识别"):
                 provider.chat([{"role": "user", "content": "hello"}])
+        for body in ({"message": None}, {"message": {}},
+                     {"message": {"content": None}},
+                     {"message": {"content": "   "}}):
+            with self.subTest(body=body), \
+                    patch("llm.ollama.urlopen", return_value=FakeResponse(body)):
+                with self.assertRaisesRegex(ProviderCallError, "无法识别|空回复"):
+                    provider.chat([{"role": "user", "content": "hello"}])
 
     def test_v14_ollama_rejects_images_without_network(self):
         provider = OllamaProvider(self.config)

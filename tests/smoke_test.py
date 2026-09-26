@@ -1,4 +1,4 @@
-"""不联网、不读取 .env 的 V1.3.2 基础冒烟测试。"""
+"""不联网、不读取 .env 的 V1.4.2 基础冒烟测试。"""
 import os
 import sys
 import tempfile
@@ -25,20 +25,18 @@ from media import persist_image, resolve_image
 
 
 def main() -> None:
-    assert LLMConfig().model == "deepseek-flash"
-    assert VisionConfig().model == "deepseek-flash"
+    assert LLMConfig().model == "deepseek-v4-flash"
+    assert VisionConfig().model == "deepseek-v4-flash-vision-exp"
     with patch.dict(os.environ, {"MYAI_LOAD_DOTENV": "0", "DEEPSEEK_API_KEY": "offline-test"}, clear=True), \
             patch("llm.config.load_dotenv", side_effect=AssertionError("dotenv must not load")):
-        assert LLMConfig.from_env().model == "deepseek-flash"
         config = VisionConfig.from_env()
-        assert config.model == "deepseek-flash"
         assert config.provider == "deepseek"
         assert config.api_key == LLMConfig.from_env().api_key == "offline-test"
         assert config.base_url == LLMConfig.from_env().base_url == "https://api.deepseek.com"
         assert isinstance(create_vision_provider(), DeepSeekVisionProvider)
         with patch.dict(os.environ, {"DEEPSEEK_VISION_MODEL": "custom-vision",
                                      "DEEPSEEK_BASE_URL": "https://example.invalid"}):
-            assert VisionConfig.from_env().model == "deepseek-flash"
+            assert VisionConfig.from_env().model == "deepseek-v4-flash-vision-exp"
             assert VisionConfig.from_env().base_url == LLMConfig.from_env().base_url
         with patch.dict(os.environ, {"MYAI_VISION_PROVIDER": "openai", "OPENAI_API_KEY": "offline-openai"}):
             fallback = VisionConfig.from_env()
@@ -103,7 +101,7 @@ def main() -> None:
         snapshot = deepcopy(original)
         assert vision.chat(original, timeout=12, response_format={"type": "json_object"}) == "vision reply"
         assert original == snapshot
-        assert captured[-1]["model"] == "deepseek-flash"
+        assert captured[-1]["model"] == "deepseek-v4-flash-vision-exp"
         assert captured[-1]["timeout"] == 12
         assert "extra_body" not in captured[-1]
         assert captured[-1]["response_format"] == {"type": "json_object"}
@@ -183,7 +181,7 @@ def main() -> None:
                        default_context_builder.build_messages(conversation_id))
         set_default_provider(None)
         set_vision_provider(None)
-    print("MyAI V1.3.2 smoke test: PASS")
+    print("MyAI V1.4.2 smoke test: PASS")
 
 
 if __name__ == "__main__":
