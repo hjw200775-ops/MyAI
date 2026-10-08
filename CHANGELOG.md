@@ -1,5 +1,17 @@
 # 更新日志
 
+## 2026-09-27 · MyAI V1.5 — GUI 模型切换与用户设置
+
+- 主界面新增“AI 设置”，显示并切换 DeepSeek 云端 / Ollama 本地文字 Provider。
+- 保存后热替换文字 Provider，后续纯文字消息无需重启即可生效。
+- 新增 `settings.py`，将 `text_provider`、`ollama_model`、`ollama_base_url` 持久化到 `%APPDATA%\MyAI\settings.json`。
+- 缺失、损坏、字段不完整或非法的 JSON 安全回退到 `.env` / 内置默认值；写入使用临时文件与原子替换。
+- Ollama Provider 新增 `/api/tags` 状态检查，可区分不可连接、超时、异常响应和模型未安装。
+- Vision Provider 保持独立 DeepSeek 路线，切换文字 Provider不修改或重建 Vision Provider。
+- `.env` 继续保存 API Key、高级运行参数与首次运行默认值；用户设置永不保存 API Key。
+- 新增完全离线的设置、保存重载、损坏回退、双向热切换、Ollama 字段更新、Vision 隔离和密钥排除测试。
+- 保留 V1.4.2 的标题容错、DeepSeek/Ollama 空响应保护，以及现有人格、记忆、情绪、关系、会话与图片功能。
+
 ## 2026-09-26 · MyAI V1.4.2 — 空返回容错修复
 
 - 修复 `_clean_title()` 对空标题执行 `.strip().splitlines()[0]` 引发的后台线程 `IndexError`。

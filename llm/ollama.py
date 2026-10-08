@@ -1,6 +1,7 @@
-"""Ollama's local /api/chat transport for V1.4.2 text generation only."""
+"""Ollama local text transport and V1.5 connection diagnostics."""
 import json
 import socket
+from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
@@ -9,6 +10,12 @@ from urllib.request import Request, urlopen
 from .base import LLMProvider, Message, VisionNotSupportedError
 from .config import LLMConfig
 from .diagnostics import ProviderCallError, safe_label
+
+
+@dataclass(frozen=True)
+class OllamaStatus:
+    code: str
+    message: str
 
 
 class OllamaProvider(LLMProvider):
@@ -23,6 +30,35 @@ class OllamaProvider(LLMProvider):
                 "Ollama 地址无效，请检查 OLLAMA_BASE_URL（例如 http://127.0.0.1:11434）。"
             )
         return f"{base_url}/api/chat"
+
+    def _tags_endpoint(self) -> str:
+        return f"{self._endpoint().rsplit('/', 1)[0]}/tags"
+
+    def check_status(self, timeout: float = 3.0) -> OllamaStatus:
+        """Check the local service and configured model without generating text."""
+        try:
+            request = Request(self._tags_endpoint(), method="GET")
+            with urlopen(request, timeout=timeout) as response:
+                body = json.loads(response.read().decode("utf-8"))
+            models = body.get("models", [])
+            names = {
+                str(item.get("name", "")) for item in models if isinstance(item, dict)
+            }
+        except HTTPError as exc:
+            return OllamaStatus("http_error", f"连接失败：Ollama 返回 HTTP {exc.code}")
+        except (URLError, ConnectionError, OSError) as exc:
+            reason = getattr(exc, "reason", None)
+            if isinstance(exc, (TimeoutError, socket.timeout)) or isinstance(
+                    reason, (TimeoutError, socket.timeout)):
+                return OllamaStatus("timeout", "连接超时：请检查 Ollama 地址")
+            return OllamaStatus("unavailable", "服务未启动或无法连接")
+        except (UnicodeDecodeError, json.JSONDecodeError, AttributeError, TypeError):
+            return OllamaStatus("invalid_response", "连接成功，但服务响应无法识别")
+        if self.config.model not in names:
+            return OllamaStatus(
+                "model_missing", f"已连接，但未安装模型：{self.config.model}"
+            )
+        return OllamaStatus("ok", f"已连接，模型可用：{self.config.model}")
 
     @staticmethod
     def _format(response_format: Mapping[str, Any] | None) -> Any:
@@ -39,7 +75,7 @@ class OllamaProvider(LLMProvider):
              timeout: float | None = None) -> str:
         if any(isinstance(message.get("content"), list) for message in messages):
             raise VisionNotSupportedError(
-                "Ollama 在 MyAI V1.4.2 中只处理纯文字；图片仍由 DeepSeek Vision 处理。"
+                "Ollama 在 MyAI V1.5 中只处理纯文字；图片仍由 DeepSeek Vision 处理。"
             )
         if not self.config.model:
             raise ProviderCallError("未设置 OLLAMA_MODEL，请在 .env 中填写已安装的模型名。")

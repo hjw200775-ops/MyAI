@@ -4,6 +4,7 @@ from .deepseek import DeepSeekProvider
 from .deepseek_vision import DeepSeekVisionProvider
 from .ollama import OllamaProvider
 from .openai_vision import OpenAIVisionProvider
+from settings import UserSettings, get_settings_service
 
 _default_provider: LLMProvider | None = None
 _vision_provider: LLMProvider | None = None
@@ -23,8 +24,16 @@ def create_provider(config: LLMConfig | None = None) -> LLMProvider:
 def get_default_provider() -> LLMProvider:
     global _default_provider
     if _default_provider is None:
-        _default_provider = create_provider()
+        settings = get_settings_service().load()
+        _default_provider = create_provider(LLMConfig.from_settings(settings))
     return _default_provider
+
+
+def apply_text_settings(settings: UserSettings) -> LLMProvider:
+    """Hot-swap text generation for subsequent calls; Vision stays untouched."""
+    provider = create_provider(LLMConfig.from_settings(settings))
+    set_default_provider(provider)
+    return provider
 
 
 def create_vision_provider(config: VisionConfig | None = None) -> LLMProvider:
@@ -61,4 +70,4 @@ def set_vision_provider(provider: LLMProvider | None) -> None:
 __all__ = ["LLMConfig", "VisionConfig", "LLMProvider", "Message", "OllamaProvider",
            "VisionNotSupportedError", "create_provider", "create_vision_provider",
            "get_default_provider", "get_vision_provider", "set_default_provider",
-           "set_vision_provider"]
+           "set_vision_provider", "apply_text_settings"]

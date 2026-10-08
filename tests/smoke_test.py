@@ -1,4 +1,4 @@
-"""不联网、不读取 .env 的 V1.4.2 基础冒烟测试。"""
+"""不联网、不读取 .env 的 V1.5 基础冒烟测试。"""
 import os
 import sys
 import tempfile
@@ -25,7 +25,7 @@ from media import persist_image, resolve_image
 
 
 def main() -> None:
-    assert LLMConfig().model == "deepseek-v4-flash"
+    assert LLMConfig().model == "deepseek-flash"
     assert VisionConfig().model == "deepseek-v4-flash-vision-exp"
     with patch.dict(os.environ, {"MYAI_LOAD_DOTENV": "0", "DEEPSEEK_API_KEY": "offline-test"}, clear=True), \
             patch("llm.config.load_dotenv", side_effect=AssertionError("dotenv must not load")):
@@ -181,7 +181,7 @@ def main() -> None:
                        default_context_builder.build_messages(conversation_id))
         set_default_provider(None)
         set_vision_provider(None)
-    print("MyAI V1.4.2 smoke test: PASS")
+    print("MyAI V1.5 smoke test: PASS")
 
 
 if __name__ == "__main__":

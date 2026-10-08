@@ -8,12 +8,16 @@ from PIL import Image
 
 from ai import chat, process_post_reply_tasks, refresh_system_prompt
 from emotion import get_emotion
+from llm import apply_text_settings, create_provider
+from llm.config import LLMConfig
+from llm.ollama import OllamaProvider
 from media import SUPPORTED_IMAGE_EXTENSIONS, validate_image
 from memory import (create_conversation, delete_conversation, delete_memory,
                     get_or_create_current_conversation, list_conversations,
                     load_memories, load_message_records, load_messages,
                     rename_conversation, save_memory)
 from relationship import get_relationship
+from settings import UserSettings, get_settings_service
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
@@ -25,7 +29,7 @@ if not AVATAR_PATH.is_file():
     raise FileNotFoundError(f"找不到小悠头像资源：{AVATAR_PATH}")
 
 app = ctk.CTk()
-app.title("MyAI v1.4.2")
+app.title("MyAI v1.5")
 app.geometry("940x700")
 app.minsize(780, 580)
 
@@ -35,6 +39,12 @@ background_result_queue = queue.Queue()
 request_in_progress = False
 selected_image_path = None
 preview_ctk_image = None
+settings_service = get_settings_service()
+current_user_settings = settings_service.load()
+
+
+def _provider_label(settings):
+    return "Ollama 本地" if settings.text_provider == "ollama" else "DeepSeek 云端"
 
 
 def show_memories():
@@ -122,6 +132,119 @@ def show_relationship():
                  text_color="gray70").pack(pady=14)
 
 
+def show_ai_settings():
+    window = ctk.CTkToplevel(app)
+    window.title("AI 设置")
+    window.geometry("520x460")
+    window.resizable(False, False)
+    window.transient(app)
+    window.grab_set()
+
+    settings = settings_service.load()
+    labels = {"DeepSeek 云端": "deepseek", "Ollama 本地": "ollama"}
+    selected_label = ctk.StringVar(value=_provider_label(settings))
+
+    ctk.CTkLabel(window, text="AI 设置",
+                 font=("Microsoft YaHei", 22, "bold")).pack(pady=(22, 16))
+    form = ctk.CTkFrame(window)
+    form.pack(fill="x", padx=24, pady=(0, 12))
+    ctk.CTkLabel(form, text="文字模型", width=110, anchor="w").grid(
+        row=0, column=0, padx=(16, 8), pady=(18, 10), sticky="w")
+    provider_menu = ctk.CTkOptionMenu(
+        form, values=list(labels), variable=selected_label, width=280)
+    provider_menu.grid(row=0, column=1, padx=(8, 16), pady=(18, 10), sticky="ew")
+
+    ctk.CTkLabel(form, text="Ollama 模型", width=110, anchor="w").grid(
+        row=1, column=0, padx=(16, 8), pady=10, sticky="w")
+    model_entry = ctk.CTkEntry(form, width=280)
+    model_entry.insert(0, settings.ollama_model)
+    model_entry.grid(row=1, column=1, padx=(8, 16), pady=10, sticky="ew")
+
+    ctk.CTkLabel(form, text="Ollama 地址", width=110, anchor="w").grid(
+        row=2, column=0, padx=(16, 8), pady=10, sticky="w")
+    url_entry = ctk.CTkEntry(form, width=280)
+    url_entry.insert(0, settings.ollama_base_url)
+    url_entry.grid(row=2, column=1, padx=(8, 16), pady=10, sticky="ew")
+    form.grid_columnconfigure(1, weight=1)
+
+    ctk.CTkLabel(
+        window,
+        text="图片理解固定使用 DeepSeek Vision，不随文字模型切换。\n界面不会显示或保存 DeepSeek API Key。",
+        text_color="gray70", justify="left",
+    ).pack(fill="x", padx=30, pady=(2, 10))
+    status_label = ctk.CTkLabel(window, text="", anchor="w")
+    status_label.pack(fill="x", padx=30, pady=(0, 8))
+
+    def draft_settings():
+        return UserSettings(
+            text_provider=labels[selected_label.get()],
+            ollama_model=model_entry.get().strip(),
+            ollama_base_url=url_entry.get().strip(),
+        )
+
+    def update_ollama_controls(_choice=None):
+        state = "normal" if labels[selected_label.get()] == "ollama" else "disabled"
+        model_entry.configure(state=state)
+        url_entry.configure(state=state)
+        check_button.configure(state=state)
+        if state == "disabled":
+            status_label.configure(text="当前文字 Provider：DeepSeek 云端")
+        else:
+            status_label.configure(text="可检查 Ollama 服务与模型是否可用。")
+
+    def check_connection():
+        draft = draft_settings()
+        check_button.configure(state="disabled", text="检查中...")
+        status_label.configure(text="正在检查 Ollama...")
+
+        def worker():
+            try:
+                provider = create_provider(LLMConfig.from_settings(draft))
+                if not isinstance(provider, OllamaProvider):
+                    raise ValueError("请先选择 Ollama 本地。")
+                status = provider.check_status()
+                text = status.message
+            except Exception:
+                text = "检查失败：请确认模型名和 Base URL。"
+
+            def finish():
+                check_button.configure(state="normal", text="检查连接")
+                status_label.configure(text=text)
+            app.after(0, finish)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def save_settings():
+        global current_user_settings
+        try:
+            saved = settings_service.save(draft_settings())
+            apply_text_settings(saved)
+        except (OSError, ValueError) as exc:
+            messagebox.showerror("无法保存设置", str(exc), parent=window)
+            return
+        current_user_settings = saved
+        ai_settings_button.configure(text=f"AI 设置 · {_provider_label(saved)}")
+        messagebox.showinfo(
+            "设置已保存",
+            "新的文字 Provider 将从下一条纯文本消息开始生效。\n"
+            "图片仍由 DeepSeek Vision 处理。",
+            parent=window,
+        )
+        window.destroy()
+
+    provider_menu.configure(command=update_ollama_controls)
+    actions = ctk.CTkFrame(window, fg_color="transparent")
+    actions.pack(fill="x", padx=24, pady=(4, 18))
+    check_button = ctk.CTkButton(actions, text="检查连接", width=110,
+                                 command=check_connection)
+    check_button.pack(side="left", padx=5)
+    ctk.CTkButton(actions, text="取消", width=90, fg_color="gray35",
+                  command=window.destroy).pack(side="right", padx=5)
+    ctk.CTkButton(actions, text="保存", width=90,
+                  command=save_settings).pack(side="right", padx=5)
+    update_ollama_controls()
+
+
 root_frame = ctk.CTkFrame(app, fg_color="transparent")
 root_frame.pack(fill="both", expand=True, padx=14, pady=14)
 sidebar = ctk.CTkFrame(root_frame, width=230)
@@ -150,6 +273,10 @@ button_frame.pack(pady=(0, 8))
 ctk.CTkButton(button_frame, text="管理记忆", width=105, command=show_memories).pack(side="left", padx=5)
 ctk.CTkButton(button_frame, text="情绪状态", width=105, command=show_emotion).pack(side="left", padx=5)
 ctk.CTkButton(button_frame, text="关系状态", width=105, command=show_relationship).pack(side="left", padx=5)
+ai_settings_button = ctk.CTkButton(
+    button_frame, text=f"AI 设置 · {_provider_label(current_user_settings)}",
+    width=145, command=show_ai_settings)
+ai_settings_button.pack(side="left", padx=5)
 chat_box = ctk.CTkTextbox(main_frame, font=("Microsoft YaHei", 16))
 chat_box.pack(fill="both", expand=True, padx=16, pady=(2, 10))
 preview_frame = ctk.CTkFrame(main_frame)

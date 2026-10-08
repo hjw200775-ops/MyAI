@@ -133,10 +133,10 @@ class VisionTests(unittest.TestCase):
         for invalid in ("nan", "inf", "-1", "bad"):
             with patch.dict(os.environ, {"MYAI_VISION_TIMEOUT": invalid}):
                 self.assertEqual(VisionConfig.from_env().timeout, 120)
-        for invalid_model in ("typo-model", "sk-secret-accidentally-pasted"):
+        for invalid_model in ("typo-model", "api-key-accidentally-pasted"):
             with patch.dict(os.environ, {"MYAI_VISION_PROVIDER": "deepseek",
                                          "DEEPSEEK_VISION_MODEL": invalid_model,
-                                         "DEEPSEEK_API_KEY": "sk-secret-accidentally-pasted"}):
+                                         "DEEPSEEK_API_KEY": "offline-api-key-value"}):
                 config = VisionConfig.from_env()
                 self.assertEqual(config.model, DEEPSEEK_VISION_MODEL)
                 self.assertNotIn(config.api_key, repr(config))

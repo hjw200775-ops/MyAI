@@ -52,7 +52,7 @@ class LLMConfig:
     provider: str = "deepseek"
     api_key: str | None = field(default=None, repr=False)
     base_url: str = "https://api.deepseek.com"
-    model: str = "deepseek-v4-flash"
+    model: str = "deepseek-flash"
     timeout: float = 30.0
     keep_alive: str = "10m"
     num_ctx: int = 4096
@@ -84,7 +84,32 @@ class LLMConfig:
             provider=provider,
             api_key=os.getenv("DEEPSEEK_API_KEY"),
             base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com").strip(),
-            model=os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash").strip(),
+            model=os.getenv("DEEPSEEK_MODEL", "deepseek-flash").strip(),
+            timeout=_positive_float(os.getenv("MYAI_LLM_TIMEOUT"), 30.0),
+        )
+
+    @classmethod
+    def from_settings(cls, settings) -> "LLMConfig":
+        """Combine non-secret user choices with secrets/runtime tuning from env."""
+        _load_environment()
+        if settings.text_provider == "ollama":
+            return cls(
+                provider="ollama",
+                api_key=None,
+                base_url=settings.ollama_base_url,
+                model=settings.ollama_model,
+                timeout=_positive_float(
+                    os.getenv("OLLAMA_TIMEOUT", os.getenv("MYAI_LLM_TIMEOUT")), 60.0
+                ),
+                keep_alive=os.getenv("OLLAMA_KEEP_ALIVE", "10m").strip() or "10m",
+                num_ctx=_bounded_int(os.getenv("OLLAMA_NUM_CTX"), 4096, 512, 32768),
+                think=_boolean(os.getenv("OLLAMA_THINK"), False),
+            )
+        return cls(
+            provider="deepseek",
+            api_key=os.getenv("DEEPSEEK_API_KEY"),
+            base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com").strip(),
+            model=os.getenv("DEEPSEEK_MODEL", "deepseek-flash").strip(),
             timeout=_positive_float(os.getenv("MYAI_LLM_TIMEOUT"), 30.0),
         )
 

@@ -1,4 +1,4 @@
-"""Offline Ollama V1.4 tests. No dotenv, Ollama, or DeepSeek network calls."""
+"""Offline Ollama V1.5 tests. No dotenv, Ollama, or DeepSeek network calls."""
 import io
 import json
 import os
@@ -148,6 +148,33 @@ class OllamaProviderTests(unittest.TestCase):
                     patch("llm.ollama.urlopen", return_value=FakeResponse(body)):
                 with self.assertRaisesRegex(ProviderCallError, "无法识别|空回复"):
                     provider.chat([{"role": "user", "content": "hello"}])
+
+    def test_connection_status_distinguishes_service_and_model(self):
+        provider = OllamaProvider(self.config)
+        captured = {}
+
+        def available(request, timeout):
+            captured["url"] = request.full_url
+            captured["method"] = request.get_method()
+            captured["timeout"] = timeout
+            return FakeResponse({"models": [{"name": "qwen3.5:4b"}]})
+
+        with patch("llm.ollama.urlopen", side_effect=available):
+            status = provider.check_status(timeout=2.5)
+        self.assertEqual(status.code, "ok")
+        self.assertEqual(captured, {
+            "url": "http://127.0.0.1:11434/api/tags",
+            "method": "GET", "timeout": 2.5,
+        })
+
+        with patch("llm.ollama.urlopen", return_value=FakeResponse({
+                "models": [{"name": "another-model:latest"}]})):
+            status = provider.check_status()
+        self.assertEqual(status.code, "model_missing")
+        self.assertIn("qwen3.5:4b", status.message)
+
+        with patch("llm.ollama.urlopen", side_effect=URLError(ConnectionRefusedError())):
+            self.assertEqual(provider.check_status().code, "unavailable")
 
     def test_v14_ollama_rejects_images_without_network(self):
         provider = OllamaProvider(self.config)

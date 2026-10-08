@@ -1,4 +1,4 @@
-"""Offline DeepSeek text response-shape tests for V1.4.2."""
+"""Offline DeepSeek text response-shape tests for V1.5."""
 import os
 import sys
 import unittest
