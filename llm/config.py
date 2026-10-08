@@ -1,4 +1,5 @@
 import os
+import sys
 from pathlib import Path
 from dataclasses import dataclass, field
 import math
@@ -13,7 +14,9 @@ except ImportError:  # 基础导入/离线测试不强制要求第三方依赖�
 def _load_environment() -> None:
     # Explicit project path avoids discovering unrelated parent .env files.
     if load_dotenv is not None and os.getenv("MYAI_LOAD_DOTENV", "1") != "0":
-        load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+        root = (Path(sys.executable).resolve().parent if getattr(sys, "frozen", False)
+                else Path(__file__).resolve().parents[1])
+        load_dotenv(root / ".env")
 
 
 # Preserve startup configuration loading; tests explicitly disable it.
@@ -67,6 +70,8 @@ class LLMConfig:
         if provider is None:
             provider = os.getenv("MYAI_LLM_PROVIDER", "deepseek")
         provider = provider.strip().lower()
+        if provider not in {"deepseek", "ollama"}:
+            provider = "deepseek"
         if provider == "ollama":
             return cls(
                 provider=provider,

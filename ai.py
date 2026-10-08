@@ -1,3 +1,16 @@
+from contextvars import ContextVar
+from contextlib import contextmanager
+
+_request_provider = ContextVar("request_provider", default=None)
+
+@contextmanager
+def text_provider_scope(provider):
+    token = _request_provider.set(provider)
+    try:
+        yield
+    finally:
+        _request_provider.reset(token)
+
 import json
 from llm.diagnostics import report_error
 from context import CONTEXT_MESSAGE_LIMIT, default_context_builder
@@ -19,7 +32,7 @@ from relationship import change_relationship
 
 
 def _llm_chat(messages, *, response_format=None, timeout=None):
-    return get_default_provider().chat(
+    return (_request_provider.get() or get_default_provider()).chat(
         messages, response_format=response_format, timeout=timeout
     )
 

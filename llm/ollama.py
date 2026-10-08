@@ -24,8 +24,16 @@ class OllamaProvider(LLMProvider):
 
     def _endpoint(self) -> str:
         base_url = self.config.base_url.rstrip("/")
-        parsed = urlsplit(base_url)
-        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        try:
+            parsed = urlsplit(base_url)
+            port = parsed.port
+            valid = (parsed.scheme in {"http", "https"} and parsed.hostname
+                     and not parsed.username and not parsed.password
+                     and not parsed.query and not parsed.fragment and not parsed.path
+                     and not any(c.isspace() or ord(c) < 32 for c in base_url))
+        except ValueError:
+            valid = False
+        if not valid:
             raise ProviderCallError(
                 "Ollama 地址无效，请检查 OLLAMA_BASE_URL（例如 http://127.0.0.1:11434）。"
             )
@@ -52,9 +60,12 @@ class OllamaProvider(LLMProvider):
                     reason, (TimeoutError, socket.timeout)):
                 return OllamaStatus("timeout", "连接超时：请检查 Ollama 地址")
             return OllamaStatus("unavailable", "服务未启动或无法连接")
+        except ProviderCallError:
+            return OllamaStatus("invalid_config", "Ollama 地址无效，请使用服务根地址。")
         except (UnicodeDecodeError, json.JSONDecodeError, AttributeError, TypeError):
             return OllamaStatus("invalid_response", "连接成功，但服务响应无法识别")
-        if self.config.model not in names:
+        model = self.config.model
+        if model not in names and not (":" not in model.rsplit("/", 1)[-1] and model + ":latest" in names):
             return OllamaStatus(
                 "model_missing", f"已连接，但未安装模型：{self.config.model}"
             )

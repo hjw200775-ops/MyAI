@@ -40,17 +40,18 @@ def change_relationship(trust=0, familiarity=0, closeness=0):
     # 二次限幅防止调用方或模型造成单轮大幅波动。
     limits = {"trust": 2.0, "familiarity": 1.0, "closeness": 2.0}
     requested = {"trust": trust, "familiarity": familiarity, "closeness": closeness}
-    current = get_relationship()
-    updated = {}
-    for name, delta in requested.items():
-        delta = max(-limits[name], min(limits[name], float(delta)))
-        updated[name] = clamp(current[name] + delta)
-    with _lock, database_connection() as conn:
-        conn.execute("""
-            UPDATE relationship_state
-            SET trust=?,familiarity=?,closeness=?,updated_at=? WHERE id=1
-        """, (updated["trust"], updated["familiarity"], updated["closeness"],
-              datetime.now().isoformat(timespec="seconds")))
+    with _lock:
+        current = get_relationship()
+        updated = {}
+        for name, delta in requested.items():
+            delta = max(-limits[name], min(limits[name], float(delta)))
+            updated[name] = clamp(current[name] + delta)
+        with database_connection() as conn:
+            conn.execute("""
+                UPDATE relationship_state
+                SET trust=?,familiarity=?,closeness=?,updated_at=? WHERE id=1
+            """, (updated["trust"], updated["familiarity"], updated["closeness"],
+                  datetime.now().isoformat(timespec="seconds")))
     return get_relationship()
 
 

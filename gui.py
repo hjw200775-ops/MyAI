@@ -6,9 +6,9 @@ from tkinter import filedialog, messagebox
 import customtkinter as ctk
 from PIL import Image
 
-from ai import chat, process_post_reply_tasks, refresh_system_prompt
+from ai import text_provider_scope, chat, process_post_reply_tasks, refresh_system_prompt
 from emotion import get_emotion
-from llm import apply_text_settings, create_provider
+from llm import get_default_provider, apply_text_settings, create_provider
 from llm.config import LLMConfig
 from llm.ollama import OllamaProvider
 from media import SUPPORTED_IMAGE_EXTENSIONS, validate_image
@@ -29,7 +29,7 @@ if not AVATAR_PATH.is_file():
     raise FileNotFoundError(f"找不到小悠头像资源：{AVATAR_PATH}")
 
 app = ctk.CTk()
-app.title("MyAI v1.5")
+app.title("MyAI v1.5.1")
 app.geometry("940x700")
 app.minsize(780, 580)
 
@@ -41,6 +41,7 @@ selected_image_path = None
 preview_ctk_image = None
 settings_service = get_settings_service()
 current_user_settings = settings_service.load()
+apply_text_settings(current_user_settings)
 
 
 def _provider_label(settings):
@@ -140,7 +141,7 @@ def show_ai_settings():
     window.transient(app)
     window.grab_set()
 
-    settings = settings_service.load()
+    settings = current_user_settings
     labels = {"DeepSeek 云端": "deepseek", "Ollama 本地": "ollama"}
     selected_label = ctk.StringVar(value=_provider_label(settings))
 
@@ -192,6 +193,24 @@ def show_ai_settings():
         else:
             status_label.configure(text="可检查 Ollama 服务与模型是否可用。")
 
+    connection_results = queue.Queue()
+
+    def poll_connection():
+        if not window.winfo_exists():
+            return
+        try:
+            while True:
+                checked, text = connection_results.get_nowait()
+                check_button.configure(text="检查连接")
+                update_ollama_controls()
+                if draft_settings() == checked:
+                    status_label.configure(text=text)
+        except queue.Empty:
+            pass
+        window.after(50, poll_connection)
+
+    window.after(50, poll_connection)
+
     def check_connection():
         draft = draft_settings()
         check_button.configure(state="disabled", text="检查中...")
@@ -207,10 +226,7 @@ def show_ai_settings():
             except Exception:
                 text = "检查失败：请确认模型名和 Base URL。"
 
-            def finish():
-                check_button.configure(state="normal", text="检查连接")
-                status_label.configure(text=text)
-            app.after(0, finish)
+            connection_results.put((draft, text))
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -220,7 +236,7 @@ def show_ai_settings():
             saved = settings_service.save(draft_settings())
             apply_text_settings(saved)
         except (OSError, ValueError) as exc:
-            messagebox.showerror("无法保存设置", str(exc), parent=window)
+            messagebox.showerror("无法保存设置", "设置保存失败，请检查配置内容及目录写入权限。", parent=window)
             return
         current_user_settings = saved
         ai_settings_button.configure(text=f"AI 设置 · {_provider_label(saved)}")
@@ -403,27 +419,29 @@ def set_input_enabled(enabled):
         input_box.focus()
 
 
-def ask_ai(user_text, image_path, conversation_id):
+def ask_ai(user_text, image_path, conversation_id, provider):
     try:
-        ai_reply, saved_memory = chat(user_text, conversation_id, image_path=image_path)
+        with text_provider_scope(provider):
+            ai_reply, saved_memory = chat(user_text, conversation_id, image_path=image_path)
         result_queue.put((conversation_id, ai_reply, saved_memory, None))
         latest = load_message_records(conversation_id, limit=1)
         if (user_text and latest and latest[-1]["role"] == "assistant" and
                 latest[-1]["content"] == ai_reply):
             threading.Thread(
                 target=run_background_tasks,
-                args=(user_text, ai_reply, conversation_id), daemon=True,
+                args=(user_text, ai_reply, conversation_id, provider), daemon=True,
             ).start()
     except Exception as exc:
         from llm.diagnostics import report_error
         result_queue.put((conversation_id, "处理消息失败：" + report_error(exc), None, None))
 
 
-def run_background_tasks(user_text, ai_reply, conversation_id):
+def run_background_tasks(user_text, ai_reply, conversation_id, provider):
     try:
-        saved_memory, title = process_post_reply_tasks(
-            user_text, ai_reply, conversation_id
-        )
+        with text_provider_scope(provider):
+            saved_memory, title = process_post_reply_tasks(
+                user_text, ai_reply, conversation_id
+            )
     except Exception:
         # Title/memory/state analysis is optional and must not crash this worker.
         saved_memory, title = None, None
@@ -489,7 +507,7 @@ def send_message():
     input_box.delete(0, "end")
     clear_selected_image()
     set_input_enabled(False)
-    threading.Thread(target=ask_ai, args=(user_text, image_path, conversation_id), daemon=True).start()
+    threading.Thread(target=ask_ai, args=(user_text, image_path, conversation_id, get_default_provider()), daemon=True).start()
 
 
 new_button.configure(command=new_conversation)

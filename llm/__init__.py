@@ -1,3 +1,15 @@
+from threading import RLock
+from functools import wraps
+
+_provider_lock = RLock()
+
+def _synchronized(function):
+    @wraps(function)
+    def wrapped(*args, **kwargs):
+        with _provider_lock:
+            return function(*args, **kwargs)
+    return wrapped
+
 from .base import LLMProvider, Message, VisionNotSupportedError
 from .config import LLMConfig, VisionConfig
 from .deepseek import DeepSeekProvider
@@ -21,6 +33,7 @@ def create_provider(config: LLMConfig | None = None) -> LLMProvider:
     )
 
 
+@_synchronized
 def get_default_provider() -> LLMProvider:
     global _default_provider
     if _default_provider is None:
@@ -29,9 +42,13 @@ def get_default_provider() -> LLMProvider:
     return _default_provider
 
 
+@_synchronized
 def apply_text_settings(settings: UserSettings) -> LLMProvider:
     """Hot-swap text generation for subsequent calls; Vision stays untouched."""
-    provider = create_provider(LLMConfig.from_settings(settings))
+    config = LLMConfig.from_settings(settings)
+    if _default_provider is not None and getattr(_default_provider, "config", None) == config:
+        return _default_provider
+    provider = create_provider(config)
     set_default_provider(provider)
     return provider
 
@@ -49,6 +66,7 @@ def create_vision_provider(config: VisionConfig | None = None) -> LLMProvider:
     raise ValueError(f"不支持的 Vision Provider：{config.provider}")
 
 
+@_synchronized
 def get_vision_provider() -> LLMProvider:
     global _vision_provider
     if _vision_provider is None:
@@ -56,12 +74,14 @@ def get_vision_provider() -> LLMProvider:
     return _vision_provider
 
 
+@_synchronized
 def set_default_provider(provider: LLMProvider | None) -> None:
     """供测试或未来设置界面替换 Provider，不触碰 ai.py。"""
     global _default_provider
     _default_provider = provider
 
 
+@_synchronized
 def set_vision_provider(provider: LLMProvider | None) -> None:
     global _vision_provider
     _vision_provider = provider

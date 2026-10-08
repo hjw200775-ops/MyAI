@@ -4,6 +4,8 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+import re
+from urllib.parse import urlsplit
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Mapping
@@ -30,8 +32,27 @@ def _clean_provider(value: object, fallback: str = "deepseek") -> str:
 
 
 def _clean_text(value: object, fallback: str) -> str:
-    text = str(value or "").strip()
+    text = value.strip() if isinstance(value, str) else ""
     return text or fallback
+
+
+def _clean_model(value, fallback):
+    text = _clean_text(value, fallback)
+    return text if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:/-]{0,199}", text) else fallback
+
+
+def _clean_url(value, fallback):
+    text = _clean_text(value, fallback).rstrip("/")
+    try:
+        url = urlsplit(text)
+        port = url.port
+        valid = (url.scheme in {"http", "https"} and url.hostname and
+                 not url.username and not url.password and not url.query and
+                 not url.fragment and not url.path and
+                 not any(c.isspace() or ord(c) < 32 for c in text))
+        return text if valid else fallback
+    except ValueError:
+        return fallback
 
 
 @dataclass(frozen=True)
@@ -46,8 +67,8 @@ class UserSettings:
         provider = env.get("TEXT_PROVIDER", env.get("MYAI_LLM_PROVIDER", "deepseek"))
         return cls(
             text_provider=_clean_provider(provider),
-            ollama_model=_clean_text(env.get("OLLAMA_MODEL"), DEFAULT_OLLAMA_MODEL),
-            ollama_base_url=_clean_text(
+            ollama_model=_clean_model(env.get("OLLAMA_MODEL"), DEFAULT_OLLAMA_MODEL),
+            ollama_base_url=_clean_url(
                 env.get("OLLAMA_BASE_URL"), DEFAULT_OLLAMA_BASE_URL
             ).rstrip("/"),
         )
@@ -60,10 +81,10 @@ class UserSettings:
             text_provider=_clean_provider(
                 values.get("text_provider"), defaults.text_provider
             ),
-            ollama_model=_clean_text(
+            ollama_model=_clean_model(
                 values.get("ollama_model"), defaults.ollama_model
             ),
-            ollama_base_url=_clean_text(
+            ollama_base_url=_clean_url(
                 values.get("ollama_base_url"), defaults.ollama_base_url
             ).rstrip("/"),
         )
@@ -90,17 +111,21 @@ class SettingsService:
 
     def save(self, settings: UserSettings) -> UserSettings:
         clean = UserSettings.from_mapping(asdict(settings), self.defaults())
+        secrets = [v for k, v in self.environ.items() if v and
+                   any(word in k.upper() for word in ("KEY", "TOKEN", "SECRET", "PASSWORD"))]
+        if any(secret in value for secret in secrets for value in asdict(clean).values()):
+            raise ValueError("模型设置不能包含 API Key 或其他凭据。")
         self.path.parent.mkdir(parents=True, exist_ok=True)
         temporary_path: Path | None = None
         try:
             with tempfile.NamedTemporaryFile(
                     "w", encoding="utf-8", dir=self.path.parent,
                     prefix=f".{self.path.name}.", suffix=".tmp", delete=False) as handle:
+                temporary_path = Path(handle.name)
                 json.dump(asdict(clean), handle, ensure_ascii=False, indent=2)
                 handle.write("\n")
                 handle.flush()
                 os.fsync(handle.fileno())
-                temporary_path = Path(handle.name)
             os.replace(temporary_path, self.path)
         finally:
             if temporary_path is not None and temporary_path.exists():

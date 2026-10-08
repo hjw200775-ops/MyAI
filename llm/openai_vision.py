@@ -1,3 +1,12 @@
+from threading import RLock
+from weakref import finalize
+
+def _close_client(client):
+    try:
+        client.close()
+    except Exception:
+        pass
+
 import base64
 import io
 import json
@@ -78,6 +87,7 @@ class OpenAIVisionProvider(LLMProvider):
     api_key_variable = "OPENAI_API_KEY"
     def __init__(self, config: VisionConfig):
         self.config = config
+        self._client_lock = RLock()
         self._client: "OpenAI | None" = None
 
     @property
@@ -87,13 +97,15 @@ class OpenAIVisionProvider(LLMProvider):
     def _get_client(self) -> "OpenAI":
         if not self.config.api_key:
             raise LocalValidationError(f"未设置 {self.api_key_variable} 环境变量。")
-        if self._client is None:
-            try:
-                from openai import OpenAI
-            except ImportError as exc:
-                raise LocalValidationError("缺少 openai 依赖，请先安装 requirements.txt。") from exc
-            self._client = OpenAI(api_key=self.config.api_key, base_url=self.config.base_url,
-                                  max_retries=0)
+        with self._client_lock:
+            if self._client is None:
+                try:
+                    from openai import OpenAI
+                except ImportError as exc:
+                    raise LocalValidationError("缺少 openai 依赖，请先安装 requirements.txt。") from exc
+                self._client = OpenAI(api_key=self.config.api_key, base_url=self.config.base_url,
+                                      max_retries=0)
+                finalize(self, _close_client, self._client)
         return self._client
 
     def request_options(self):

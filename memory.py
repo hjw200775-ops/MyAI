@@ -1,12 +1,16 @@
 import os
 import sqlite3
+import sys
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from threading import RLock
 
 
-DB_PATH = Path(os.getenv("MYAI_DB_PATH", str(Path(__file__).resolve().with_name("memory.db"))))
+_default_db = Path(__file__).resolve().with_name("memory.db")
+if getattr(sys, "frozen", False):
+    _default_db = Path(os.getenv("LOCALAPPDATA") or Path.home() / ".myai") / "MyAI" / "memory.db"
+DB_PATH = Path(os.getenv("MYAI_DB_PATH", str(_default_db))).expanduser()
 VALID_CATEGORIES = {
     "identity", "interest", "study", "work", "goal", "preference",
     "relationship", "other",
@@ -36,6 +40,7 @@ def _state_value(value, default):
 
 
 def get_connection():
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(str(DB_PATH), timeout=10)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys=ON")
