@@ -29,7 +29,7 @@ if not AVATAR_PATH.is_file():
     raise FileNotFoundError(f"找不到小悠头像资源：{AVATAR_PATH}")
 
 app = ctk.CTk()
-app.title("MyAI v1.5.1")
+app.title("MyAI v1.6.1")
 app.geometry("940x700")
 app.minsize(780, 580)
 

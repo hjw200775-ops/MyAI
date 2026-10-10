@@ -32,7 +32,7 @@ class ContextBuilder:
             f"【关于用户的长期记忆】\n{memory_text}\n只在当前话题确实相关时自然使用记忆，不要为了证明有记忆而复述或罗列资料。",
             "【图片对话原则】\n图片是用户当前表达的一部分。直接结合图中内容、聊天语境和你的人格自然回应；不要输出机械的图片描述报告，也不要声称看到了无法确认的细节。",
         ]
-        # V1.2 仅提供槽位；摘要、时间与视觉内容由以后版本传入。
+        # V1.6 时间快照由聊天入口在保存当前消息之前传入；Provider 共用。
         if options.conversation_summary:
             sections.append(f"【较早会话摘要】\n{options.conversation_summary}")
         if options.time_context:

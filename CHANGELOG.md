@@ -1,5 +1,29 @@
 # 更新日志
 
+## 2026-10-10 · 研究驱动增量更新
+
+基于 V1.6 Temporal Awareness，新增可重新规划主动时间队列、分类记忆保留和可衰减短期 affect 基础设施。真正主动发送留给 V1.7。
+
+- 新增 pending_actions SQLite 表、repository/service 与最新上下文复核 hook。到期只 eligible，无发送器、后台定时器或弹窗。
+- memories 兼容 ADD COLUMN 迁移；明确事实/偏好 active、临时信息 TTL、推断 candidate、敏感推断 abstain。自动整理增加保守规则，不增加模型调用。
+- 独立内存 affect 状态，连续衰减、TTL/异常回 neutral，不替换 emotion.py。
+- 共用 V1.6 可注入系统时钟，基础设施时间高水位处理倒退；Temporal Context 原实现保持逐字节不变。
+- 新增确定性离线基础设施测试；Provider、Vision、settings、图片和 HTTP400 修复保持原实现。
+
+## 2026-10-08 · MyAI V1.6 — Temporal Awareness
+
+- 基于完整 V1.5.1 稳定版；新增完全离线的本机日期、时间、星期、小时、自然时段、互动间隔及会话时长。
+- DeepSeek/Ollama 共用 Context Builder 的 Temporal Context；保存当前输入前计算互动间隔。Vision 原链路保留。
+- 复用 SQLite messages 时间戳，无 schema 变更；异常时间戳未知、负差归零；会话开始保存在进程内存，Provider 切换不重置。
+- 新增固定时钟与模拟传输回归；主动聊天留给 V1.7，不加入定时器、后台监控或语音功能。
+
+## 2026-10-11 · GitHub 发布与验收
+
+- 用户已确认 MyAI V1.6.1 本地测试通过；同步 V1.6 离线时间感知与 V1.6.1 研究驱动增量源码。
+- 分别保留 V1.6 和 V1.6.1 更新条目；本次发布前复验编译检查和全部隔离离线测试。
+- 发布仅包含源码、测试、文档、空密钥配置模板与原角色头像；排除本地 .env、数据库、会话记录、虚拟环境、缓存、日志和私人图片。
+- 真正主动发送仍属于 V1.7；到期与复核 eligible 均不会执行消息。
+
 ## 2026-10-08 · MyAI V1.5.1 — 并发、配置与打包稳定性修复
 
 - 每次聊天请求固定使用发送时选定的文字 Provider，避免切换设置影响正在进行的回复或后台分析。
@@ -123,3 +147,4 @@ DEEPSEEK_BASE_URL=https://api.deepseek.com
 - 覆盖三类消息、历史图片恢复、原图删除后托管副本可用、历史图片追问、缺失图片降级，以及数据库不存 base64。
 - 未进行真实 API 调用和 GUI 人工验收；模型权限、网络及实际识图质量需在本机验证。
 - 交付包不含真实 `.env`、API Key、聊天数据库、历史图片和虚拟环境；未更新 GitHub 仓库。
+

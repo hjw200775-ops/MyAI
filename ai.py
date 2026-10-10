@@ -13,7 +13,8 @@ def text_provider_scope(provider):
 
 import json
 from llm.diagnostics import report_error
-from context import CONTEXT_MESSAGE_LIMIT, default_context_builder
+from context import CONTEXT_MESSAGE_LIMIT, ContextOptions, default_context_builder
+from time_context import default_time_service
 from emotion import change_emotion
 from llm import VisionNotSupportedError, get_default_provider, get_vision_provider
 from media import persist_image
@@ -181,6 +182,7 @@ def analyze_memory(user_input):
 {existing_text}
 
 action 只能是 none、add、update；category 只能是 identity、interest、study、work、goal、preference、relationship、other。
+仅保存用户明确表达的事实和偏好；禁止将性格、价值观或敏感推断自动写入。
 只保存姓名、长期爱好、学习/工作方向、长期目标、稳定偏好或重要关系。
 临时信息、普通问题、重复或含糊信息使用 none。update 的 memory_id 必须指向已有记忆。
 content 必须是简洁、独立、客观的中文记忆，none 时必须为空字符串。
@@ -221,13 +223,29 @@ content 必须是简洁、独立、客观的中文记忆，none 时必须为空�
     return {"action": action, "memory_id": memory_id, "content": content, "category": category}
 
 
+def _retain_automatic_memory(content, category, memory_id=None):
+    from memory_retention import classify_automatic_memory, MemoryRetentionService
+    kind = classify_automatic_memory(content, category)
+    if kind == 'sensitive_inference':
+        return False
+    if kind in ('inferred_trait_or_value', 'temporary_state_or_plan'):
+        # An inferred/temporary correction cannot overwrite an established fact.
+        saved = MemoryRetentionService().save(
+            content, kind, category=category,
+            ttl_seconds=86400 if kind == 'temporary_state_or_plan' else None,
+            metadata={'source': 'legacy_analyzer', 'policy': 'conservative_rules'})
+        return bool(saved) and kind != 'inferred_trait_or_value'
+    return (save_memory(content, category) if memory_id is None
+            else update_memory(memory_id, content, category))
+
+
 def auto_save_memory(user_input):
     result = analyze_memory(user_input)
     changed = False
     if result["action"] == "add":
-        changed = save_memory(result["content"], result["category"])
+        changed = _retain_automatic_memory(result["content"], result["category"])
     elif result["action"] == "update":
-        changed = update_memory(result["memory_id"], result["content"], result["category"])
+        changed = _retain_automatic_memory(result["content"], result["category"], result["memory_id"])
     if changed:
         refresh_system_prompt()
         return result["content"]
@@ -259,6 +277,7 @@ trust、closeness 范围 -2 到 2；familiarity 范围 0 到 1。不确定时填
 
 memory.action 只能是 none、add、update；category 只能是
 identity、interest、study、work、goal、preference、relationship、other。
+仅保存用户明确表达的事实和偏好；禁止自动写入性格、价值观和敏感推断。
 只保存稳定、重要且非重复的信息。update 的 memory_id 必须来自已有记忆；
 none 时 memory_id 为 null、content 为空字符串。
 
@@ -313,12 +332,12 @@ title 仅在需要标题时填写 4 到 12 个汉字，否则为空字符串，�
         valid_content = isinstance(content, str) and 0 < len(content) <= 300
         try:
             if action == "add" and memory_id is None and category in VALID_CATEGORIES and valid_content:
-                if save_memory(content, category):
+                if _retain_automatic_memory(content, category):
                     saved_memory = content
             elif (action == "update" and type(memory_id) is int and
                   memory_id in {row[0] for row in existing} and
                   category in VALID_CATEGORIES and valid_content):
-                if update_memory(memory_id, content, category):
+                if _retain_automatic_memory(content, category, memory_id):
                     saved_memory = content
         except Exception:
             # A memory write is helpful, but not required for a successful reply.
@@ -358,10 +377,12 @@ def chat(user_input="", conversation_id=None, image_path=None):
             stored_image = persist_image(image_path)
         except (OSError, ValueError) as exc:
             return f"图片无法使用：{exc}", None
+    temporal = default_time_service.capture(conversation_id)
     # user 消息是真实发生的输入，即使 API 失败也保留；失败提示不伪装成 assistant 消息。
     if save_message(conversation_id, "user", user_input, stored_image) is None:
         return "保存消息时发生错误，请稍后再试。", None
-    request_messages = default_context_builder.build_messages(conversation_id)
+    request_messages = default_context_builder.build_messages(
+        conversation_id, ContextOptions(time_context=temporal.to_prompt()))
     uses_vision = any(isinstance(message.get("content"), list) for message in request_messages)
     try:
         ai_reply = (_vision_chat(request_messages) if uses_vision

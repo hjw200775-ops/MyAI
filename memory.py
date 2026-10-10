@@ -83,6 +83,11 @@ def init_database():
         conn.execute("UPDATE memories SET created_at=? WHERE created_at IS NULL", (now,))
         conn.execute("UPDATE memories SET updated_at=created_at WHERE updated_at IS NULL")
 
+        from memory_retention import migrate as migrate_retention
+        from proactive_timeline import migrate as migrate_timeline
+        migrate_retention(conn)
+        migrate_timeline(conn)
+
         # v0.9 使用一行多列（happiness/sadness/...）；v1.0 改为
         # name/value 行结构。先读取旧值，再在同一事务中完成转换。
         emotion_exists = conn.execute(
@@ -353,11 +358,12 @@ def save_memory(content, category="other"):
     try:
         with database_connection() as conn:
             cursor = conn.execute("""
-                INSERT INTO memories(content,category,created_at,updated_at)
-                SELECT ?,?,?,? WHERE NOT EXISTS(
+                INSERT INTO memories(content,category,created_at,updated_at,retention_category)
+                SELECT ?,?,?,?,? WHERE NOT EXISTS(
                     SELECT 1 FROM memories WHERE content=?
                 )
-            """, (content, _normalize_category(category), now, now, content))
+            """, (content, _normalize_category(category), now, now,
+                    'preference' if _normalize_category(category) == 'preference' else 'explicit_fact', content))
         return cursor.rowcount > 0
     except sqlite3.IntegrityError:
         return False
@@ -376,7 +382,7 @@ def update_memory(memory_id, content, category="other"):
             if conn.execute("SELECT 1 FROM memories WHERE content=? AND id<>?", (content, memory_id)).fetchone():
                 return False
             cursor = conn.execute("""
-                UPDATE memories SET content=?,category=?,updated_at=? WHERE id=?
+                UPDATE memories SET content=?,category=?,updated_at=? WHERE id=? AND retention_status='active' AND retention_category NOT IN ('inferred_trait_or_value','sensitive_inference')
             """, (content, _normalize_category(category), datetime.now().isoformat(timespec="seconds"), memory_id))
         return cursor.rowcount > 0
     except sqlite3.IntegrityError:
@@ -384,9 +390,9 @@ def update_memory(memory_id, content, category="other"):
 
 
 def load_memories():
-    with database_connection() as conn:
-        rows = conn.execute("SELECT id,content,category,created_at,updated_at FROM memories ORDER BY id").fetchall()
-    return [tuple(row) for row in rows]
+    from memory_retention import MemoryRetentionService
+    rows = MemoryRetentionService().list()
+    return [(row['id'], row['content'], row['category'], row['created_at'], row['updated_at']) for row in rows]
 
 
 def delete_memory(memory_id):
@@ -400,3 +406,22 @@ def delete_memory(memory_id):
 
 
 init_database()
+
+
+def load_temporal_history(conversation_id):
+    """Latest effective user input by insertion order, across chats and in this chat.
+
+    Do not use conversations.updated_at (titles/assistant replies update it).
+    An invalid latest timestamp stays unknown rather than pretending an older
+    record was the last interaction. Text and image-only inputs both count.
+    """
+    with database_connection() as conn:
+        effective = "role='user' AND (TRIM(content)<>'' OR COALESCE(image_path,'')<>'')"
+        global_row = conn.execute(
+            f"SELECT created_at FROM messages WHERE {effective} ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        local_row = conn.execute(
+            f"SELECT created_at FROM messages WHERE {effective} AND conversation_id=? ORDER BY id DESC LIMIT 1",
+            (conversation_id,),
+        ).fetchone()
+    return (global_row[0] if global_row else None, local_row[0] if local_row else None)
