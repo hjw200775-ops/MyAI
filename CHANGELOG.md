@@ -1,5 +1,40 @@
 # 更新日志
 
+## [1.6.1] - Companion Foundation Update
+
+### Added
+
+- 全新 CustomTkinter UI 架构
+- Controller 层分离
+- Message Bubble 聊天展示
+- Companion Core 基础架构
+- CompanionState
+- TimeAwareness
+- ProactiveManager
+- EventLog
+- Memory 页面
+- Settings 页面
+- Model Selector
+- Input Panel
+
+### Improved
+
+- Provider 切换稳定性
+- 图片消息展示
+- 长对话渲染性能
+- UI Theme 系统
+- Dark / Light 模式支持
+
+### Fixed
+
+- 多项线程与 UI 更新问题
+- 图片资源释放问题
+- Provider 请求生命周期问题
+
+---
+
+---
+
 ## 2026-10-10 · 研究驱动增量更新
 
 基于 V1.6 Temporal Awareness，新增可重新规划主动时间队列、分类记忆保留和可衰减短期 affect 基础设施。真正主动发送留给 V1.7。
@@ -147,4 +182,3 @@ DEEPSEEK_BASE_URL=https://api.deepseek.com
 - 覆盖三类消息、历史图片恢复、原图删除后托管副本可用、历史图片追问、缺失图片降级，以及数据库不存 base64。
 - 未进行真实 API 调用和 GUI 人工验收；模型权限、网络及实际识图质量需在本机验证。
 - 交付包不含真实 `.env`、API Key、聊天数据库、历史图片和虚拟环境；未更新 GitHub 仓库。
-
