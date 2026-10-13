@@ -193,4 +193,4 @@ python tests/run_offline.py tests/foundations_test.py
 
 ## License
 
-本项目目前用于学习、研究与个人开发。
+本项目基于 [MIT License](LICENSE) 开源，可自由使用、修改与分发。
