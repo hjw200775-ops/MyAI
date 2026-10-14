@@ -26,6 +26,10 @@ memory.db
 logs/
 *.log
 
+# Caches
+cache/
+.cache/
+
 # Build
 build/
 dist/
