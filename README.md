@@ -117,7 +117,8 @@ MyAI
 │   └── openai_vision.py
 │
 ├── tests/                  离线测试（模拟 Provider，不发真实请求）
-├── docs/                   设计文档
+├── scripts/                发布打包脚本（build_release.py，自动排除敏感文件）
+├── docs/                   设计文档与发布/验证报告
 ├── assets/                 资源（角色立绘等）
 │
 ├── ai.py                   对话流程
