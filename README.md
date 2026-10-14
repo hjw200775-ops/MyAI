@@ -6,7 +6,7 @@
 
 MyAI 不是简单的聊天机器人。它尝试构建一个具备长期记忆、角色状态、情绪与关系模型、图片理解、多模型支持，以及主动陪伴基础架构的个人 AI 助手。
 
-> 当前版本：**V1.6.1 — Companion Foundation Update**
+> 当前版本：**V1.6.2 — Stable（Companion Loop）**
 
 ---
 
@@ -38,9 +38,11 @@ MyAI 不是简单的聊天机器人。它尝试构建一个具备长期记忆、
 ### Companion Core
 
 - `CompanionState`
-- Time Awareness（时间感知基础）
-- Proactive Decision（主动行为决策基础）
-- Event System（`EventLog`）
+- Time Awareness（时间感知）
+- Proactive Decision（`DecisionEngine` / `ActionReviewer`）
+- Companion Loop（`companion_loop.py`）：后台每 5 分钟 tick 一次，先读取会话、Provider、请求状态与输入框草稿，忙碌时标记 busy 并防止循环任务重叠；**不自动发送消息**
+- User Activity（`user_activity.py`）：用户活动采样
+- Event System：`EventLog`（界面生命周期事件）与 `companion_events`（数据库中的共同经历事件）分开保留
 
 ### Desktop Experience
 
@@ -73,8 +75,8 @@ ui/                     界面层：MainWindow / Sidebar / TitleBar / ChatPage /
 ui/controller.py        ChatController：串接界面与业务
  ↓
 core/ · ai.py · memory.py · settings.py
-                        核心与服务：CompanionState / TimeAwareness / Proactive / EventLog，
-                        对话流程、长期记忆、用户偏好
+                        核心与服务：CompanionState / TimeAwareness / DecisionEngine /
+                        CompanionRuntime / EventLog，对话流程、长期记忆、用户偏好
  ↓
 llm/                    Provider：DeepSeek / Ollama / DeepSeek Vision
 ```
@@ -86,9 +88,10 @@ llm/                    Provider：DeepSeek / Ollama / DeepSeek Vision
 ## Project Structure
 
 ```text
-MyAI-Companion
+MyAI
 ├── core/                   Companion 核心
 │   ├── companion_state.py
+│   ├── companion_runtime.py
 │   ├── time_awareness.py
 │   ├── proactive.py
 │   └── events.py
@@ -120,6 +123,9 @@ MyAI-Companion
 ├── ai.py                   对话流程
 ├── memory.py               长期记忆
 ├── settings.py             用户偏好持久化
+├── companion_loop.py       Companion 循环（DecisionEngine / ActionReviewer）
+├── companion_events.py     共同经历事件（数据库）
+├── user_activity.py        用户活动采样
 └── gui.py                  入口
 ```
 
@@ -152,7 +158,7 @@ DEEPSEEK_BASE_URL=https://api.deepseek.com
 
 `.env` 已被 `.gitignore` 排除，**请勿提交到公开仓库**。
 
-如需使用 Ollama，请先安装并启动 Ollama，并准备一个本地模型，默认服务地址为 `http://127.0.0.1:11434`。
+如需使用 Ollama，请先安装并启动 Ollama，并准备一个本地模型，默认服务地址为 `http://127.0.0.1:11434`。可用的 Ollama 变量见 `.env.example`（`OLLAMA_MODEL`、`OLLAMA_BASE_URL`、`OLLAMA_TIMEOUT`、`OLLAMA_KEEP_ALIVE`、`OLLAMA_NUM_CTX`、`OLLAMA_THINK`）。
 
 ---
 
@@ -173,6 +179,8 @@ python -m compileall -q .
 python tests/run_offline.py tests/foundations_test.py
 ```
 
+`tests/run_offline.py` 需要一个目标测试文件作为参数；用同一入口可以运行全部 `tests/*_test.py`。
+
 ---
 
 ## Roadmap
@@ -180,13 +188,13 @@ python tests/run_offline.py tests/foundations_test.py
 | Version | Theme |
 | --- | --- |
 | **V1.6.1** | Companion Foundation |
-| **V1.6.2** | Proactive Companion |
+| **V1.6.2** | Stable — Companion Loop |
 | **V1.7** | Desktop Companion |
 | **V2.0** | Multimodal AI Companion |
 
-- **V1.6.1 — Companion Foundation**（当前）：GUI 组件化重构、Companion Core 基础、Memory / Settings 页面、时间感知与主动行为决策基础。
-- **V1.6.2 — Proactive Companion**：Companion Loop、用户活动感知、主动消息规划优化。
-- **V1.7 — Desktop Companion**：Live2D 集成、状态表现、桌宠模式。
+- **V1.6.1 — Companion Foundation**：GUI 组件化重构、Companion Core 基础、Memory / Settings 页面、时间感知与主动行为决策基础。
+- **V1.6.2 — Stable（当前）**：基于人工验收的 V1.6.1 UI 稳定版本，增量集成 Companion Loop、User Activity、Decision Engine、Action Review 与 Companion Events；保留原 UI 设计，仅在应用入口接入后台循环并更新版本标记。数据库迁移新增 `companion_events` 表与索引，`pending_actions` 增加 `reviewed_ready` / `review_outcome`。**仍未实现真正的主动发送消息，该能力属于 V1.7。**
+- **V1.7 — Desktop Companion**：主动发送、Live2D 集成、状态表现、桌宠模式。
 - **V2.0 — Multimodal AI Companion**：多模态理解、语音交互、更完整的人格成长系统。
 
 ---

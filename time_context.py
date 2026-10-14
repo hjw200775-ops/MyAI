@@ -92,12 +92,13 @@ class TimeContextService:
         self._sessions = {}
         self._lock = RLock()
 
-    def capture(self, conversation_id):
+    def capture(self, conversation_id, *, establish_session=True):
         """Call BEFORE saving the current input; snapshot survives provider switches."""
         from memory import load_temporal_history
         now = parse_timestamp(self.clock()) or local_now()
         with self._lock:
-            started = self._sessions.setdefault(conversation_id, now)
+            started = (self._sessions.setdefault(conversation_id, now) if establish_session
+                       else self._sessions.get(conversation_id, now))
         try:
             last_global, last_local = load_temporal_history(conversation_id)
         except Exception:

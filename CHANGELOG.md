@@ -1,4 +1,31 @@
 # 更新日志
+## [1.6.2] - Companion Loop
+
+### Added
+
+- `companion_loop.py`：DecisionEngine 与 ActionReviewer
+- `user_activity.py`：用户活动采样
+- `companion_events.py`：数据库中的共同经历事件
+- `core/companion_runtime.py`：后台 Companion Runtime
+- `tests/companion_test.py`
+- `companion_events` 表及时间索引
+
+### Changed
+
+- `memory.py`：companion_events 事件表迁移
+- `proactive_timeline.py`：新增审核字段与状态
+- `time_context.py`：后台采样不再建立聊天会话
+- `ui/app.py`：接入后台循环的生命周期适配调用
+- `ui/main_window.py`：更新窗口版本标题
+- `pending_actions` 增加 `reviewed_ready INTEGER NOT NULL DEFAULT 0` 与 `review_outcome TEXT`；旧数据库自动增量迁移，迁移可重复运行
+
+### Notes
+
+- 保留 V1.6.1 的 UI 设计：`gui.py`、`ui/` 布局、样式、头像、标题栏、侧栏、聊天窗口、设置页面与 `assets/` 全部保留，仅应用入口与窗口标题变更。
+- Companion Runtime 每 5 分钟在后台运行，先读取会话、Provider、请求状态与输入框草稿；草稿或请求处理中标记 busy；防止循环任务重叠。**不自动发送消息。**
+- `core/events.py`（界面生命周期事件）与 `companion_events.py`（共同经历事件）保留各自用途。
+- 真正的主动发送消息属于 V1.7；本版本仅创建、复核、延期或取消候选行为。
+
 
 ## [1.6.1] - Companion Foundation Update
 

@@ -27,6 +27,11 @@ def migrate(conn):
         created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
         last_reviewed_at TEXT, review_count INTEGER NOT NULL DEFAULT 0)''')
     conn.execute('CREATE INDEX IF NOT EXISTS idx_pending_actions_status ON pending_actions(status)')
+    columns = {row['name'] for row in conn.execute('PRAGMA table_info(pending_actions)')}
+    for name, definition in (('reviewed_ready', 'INTEGER NOT NULL DEFAULT 0'),
+                             ('review_outcome', 'TEXT')):
+        if name not in columns:
+            conn.execute(f'ALTER TABLE pending_actions ADD COLUMN {name} {definition}')
 
 
 @dataclass(frozen=True)
@@ -87,7 +92,7 @@ class PendingActionRepository:
                 expires = parse_timestamp(row['expires_at'])
                 # Corrupt timestamps fail closed: never eligible.
                 if earliest is None or expires is None or expires <= earliest or expires <= now:
-                    count += conn.execute("UPDATE pending_actions SET status='expired',updated_at=? WHERE id=?",
+                    count += conn.execute("UPDATE pending_actions SET status='expired',reviewed_ready=0,review_outcome='EXPIRE',updated_at=? WHERE id=?",
                                           (now.isoformat(), row['id'])).rowcount
         return count
 
@@ -118,7 +123,7 @@ class PendingActionRepository:
                 if not now < new_time < timestamp(row['expires_at']) or new_time <= timestamp(earliest):
                     raise ValueError('Defer must move later, after now and before expiry')
                 earliest = new_time.isoformat()
-            conn.execute('UPDATE pending_actions SET status=?,earliest_at=?,updated_at=? WHERE id=?',
+            conn.execute('UPDATE pending_actions SET status=?,earliest_at=?,reviewed_ready=0,updated_at=? WHERE id=?',
                          (status, earliest, now.isoformat(), action_id))
             return True
 

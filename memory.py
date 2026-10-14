@@ -87,6 +87,8 @@ def init_database():
         from proactive_timeline import migrate as migrate_timeline
         migrate_retention(conn)
         migrate_timeline(conn)
+        from companion_events import migrate as migrate_events
+        migrate_events(conn)
 
         # v0.9 使用一行多列（happiness/sadness/...）；v1.0 改为
         # name/value 行结构。先读取旧值，再在同一事务中完成转换。

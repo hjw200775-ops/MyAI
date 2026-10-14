@@ -1,0 +1,90 @@
+{
+  "gui.py": {
+    "baseline": "f459f136d4c2478196c5385d0e79e238ed13e405e0a8a231902304680c7511a8",
+    "stable": "f459f136d4c2478196c5385d0e79e238ed13e405e0a8a231902304680c7511a8"
+  },
+  "ui/app.py": {
+    "baseline": "d6bf87429b5471874585b6a21476334da620e332f918083a06bdad60f923dd05",
+    "stable": "5c3c92c4168481d543555385e3fdac68d94534c221f257e972240bab6a63659b"
+  },
+  "ui/assets.py": {
+    "baseline": "f7d836804938b68aa0f291dcf95fb504b1a724b46be34e36c11b5f6c6e0013ee",
+    "stable": "f7d836804938b68aa0f291dcf95fb504b1a724b46be34e36c11b5f6c6e0013ee"
+  },
+  "ui/chat_history.py": {
+    "baseline": "daa381b873d1215da5097ecf9c4afd2efa27200d80607496991cae13de9d21f8",
+    "stable": "daa381b873d1215da5097ecf9c4afd2efa27200d80607496991cae13de9d21f8"
+  },
+  "ui/chat_view.py": {
+    "baseline": "23a95509a1f5fe80474121c7e3d35210900c567ee474f311eaadfef66a334c44",
+    "stable": "23a95509a1f5fe80474121c7e3d35210900c567ee474f311eaadfef66a334c44"
+  },
+  "ui/controller.py": {
+    "baseline": "1c7df3fb38a06d41814b56916ffbe7e989a4336513bfe7631314d2448cd417f4",
+    "stable": "1c7df3fb38a06d41814b56916ffbe7e989a4336513bfe7631314d2448cd417f4"
+  },
+  "ui/dialogs.py": {
+    "baseline": "c971c8fea1ce93b2ffa7f587f047e64ffd0acce271e229391c08dc0ce3510d90",
+    "stable": "c971c8fea1ce93b2ffa7f587f047e64ffd0acce271e229391c08dc0ce3510d90"
+  },
+  "ui/icons.py": {
+    "baseline": "f9b6bded8b3eb798e4c4ac0118bc32e8099bc4f4a06ef16d687f3298515b1eef",
+    "stable": "f9b6bded8b3eb798e4c4ac0118bc32e8099bc4f4a06ef16d687f3298515b1eef"
+  },
+  "ui/input_panel.py": {
+    "baseline": "19bab5fe8e212bf9bc0a4d69e5b19f1c83f7c6a43289c3585a9b6f445bc31b2f",
+    "stable": "19bab5fe8e212bf9bc0a4d69e5b19f1c83f7c6a43289c3585a9b6f445bc31b2f"
+  },
+  "ui/main_window.py": {
+    "baseline": "1057483c32bfbee0aa38740748a106d518f2b8071da4da98c2c56cf437373396",
+    "stable": "80c85109faab9f9a044f947ea7c140deef19254664cd58ebf86823d6146510af"
+  },
+  "ui/message_bubble.py": {
+    "baseline": "c4b950f5a5c4ef79a8953bf21130bb95ced145c505827190151a41b52f06c207",
+    "stable": "c4b950f5a5c4ef79a8953bf21130bb95ced145c505827190151a41b52f06c207"
+  },
+  "ui/models.py": {
+    "baseline": "8f8f0b721aae9f5f6ff43fda486babe0990c4f9c11aac2610ad61037c1f3708c",
+    "stable": "8f8f0b721aae9f5f6ff43fda486babe0990c4f9c11aac2610ad61037c1f3708c"
+  },
+  "ui/model_selector.py": {
+    "baseline": "5e88b79d5e6ff2fa50ab5997708e31067db883f52f21ab2927cff64d54135168",
+    "stable": "5e88b79d5e6ff2fa50ab5997708e31067db883f52f21ab2927cff64d54135168"
+  },
+  "ui/pages.py": {
+    "baseline": "d6b683a94f72312f2495d2a51ed6a603e7b99eddb5f1e9a5aac27995f7361865",
+    "stable": "d6b683a94f72312f2495d2a51ed6a603e7b99eddb5f1e9a5aac27995f7361865"
+  },
+  "ui/platform_win.py": {
+    "baseline": "ef4ccafdab2c4ad5da79e36066de14c23c0f5187edcc176621802fba09c83560",
+    "stable": "ef4ccafdab2c4ad5da79e36066de14c23c0f5187edcc176621802fba09c83560"
+  },
+  "ui/sidebar.py": {
+    "baseline": "a10e265f170bcb69384db97b7d732cec87ea0c5974314e9b58501e722c0cf46d",
+    "stable": "a10e265f170bcb69384db97b7d732cec87ea0c5974314e9b58501e722c0cf46d"
+  },
+  "ui/theme.py": {
+    "baseline": "2aa98028fde49da1ce97bd95717cee8807f971791ca69d1b0f15fc9ee858c01e",
+    "stable": "2aa98028fde49da1ce97bd95717cee8807f971791ca69d1b0f15fc9ee858c01e"
+  },
+  "ui/titlebar.py": {
+    "baseline": "d44e79d9479c24cb5483c97062eed1359b74bddd8c0fe3a26e1e41c469ab14b6",
+    "stable": "d44e79d9479c24cb5483c97062eed1359b74bddd8c0fe3a26e1e41c469ab14b6"
+  },
+  "ui/ui_prefs.py": {
+    "baseline": "cdf90726ccf67bbde151cd29b7b335e7bc339b8fdf48d913e0b125fd7a4e2b8d",
+    "stable": "cdf90726ccf67bbde151cd29b7b335e7bc339b8fdf48d913e0b125fd7a4e2b8d"
+  },
+  "ui/widgets.py": {
+    "baseline": "3937c1d974fe7352db9cc7b0178b041a94d7eeccda1cb837bf2d7841f6ff333d",
+    "stable": "3937c1d974fe7352db9cc7b0178b041a94d7eeccda1cb837bf2d7841f6ff333d"
+  },
+  "ui/__init__.py": {
+    "baseline": "663a6123c5bca500090657f50619ce639bd1964bb3621409f29edeafeadf41d3",
+    "stable": "663a6123c5bca500090657f50619ce639bd1964bb3621409f29edeafeadf41d3"
+  },
+  "assets/character/xiaoyou_avatar.png": {
+    "baseline": "b52d763a3a17f1d6bec69768b1fd7f549a177dd828cca706c815e7bd1d3547f3",
+    "stable": "b52d763a3a17f1d6bec69768b1fd7f549a177dd828cca706c815e7bd1d3547f3"
+  }
+}

@@ -17,7 +17,10 @@ def create_app() -> MainWindow:
     ctk.set_default_color_theme("blue")
     ensure_avatar_exists()
     controller = ChatController()
-    return MainWindow(controller, prefs_service, prefs)
+    app = MainWindow(controller, prefs_service, prefs)
+    from core.companion_runtime import attach_companion
+    attach_companion(app, controller)
+    return app
 
 
 def run() -> None:

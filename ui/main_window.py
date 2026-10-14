@@ -18,7 +18,7 @@ from .theme import SIZE, SPACING, ctk_color
 from .titlebar import TitleBar
 from .ui_prefs import UIPrefs, UIPrefsService
 
-WINDOW_TITLE = "MyAI v1.6.1"
+WINDOW_TITLE = "MyAI V1.6.2 Stable"
 
 
 def resolve_appearance(mode: str) -> str:
